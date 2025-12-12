@@ -29,18 +29,15 @@ namespace NewsApi.Services
                 var htmlDoc = new HtmlDocument();
                 htmlDoc.LoadHtml(response);
 
-                // BBC'deki haber başlıkları genellikle h2 veya h3 içindedir.
                 var basliklar = htmlDoc.DocumentNode.SelectNodes("//h2 | //h3");
 
                 if (basliklar != null)
                 {
                     foreach (var baslik in basliklar)
                     {
-                        // 1. Önce HTML karakterlerini düzelt (&#x130; -> İ gibi)
+
                         string temizBaslik = WebUtility.HtmlDecode(baslik.InnerText.Trim());
 
-                        // 2. Filtreleme: Menü öğelerini (kısa kelimeleri) atla. 
-                        // Gerçek haber başlıkları genelde 15-20 karakterden uzundur.
                         if (!string.IsNullOrWhiteSpace(temizBaslik) && temizBaslik.Length > 15)
                         {
                             // Aynı haberden iki tane eklememek için kontrol
