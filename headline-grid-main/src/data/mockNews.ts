@@ -1,0 +1,143 @@
+import { NewsArticle } from '@/types';
+
+export const mockNews: NewsArticle[] = [
+  {
+    id: '1',
+    title: 'Global Climate Summit Reaches Historic Agreement on Carbon Emissions',
+    summary: 'World leaders unite in unprecedented accord to combat climate change with binding commitments.',
+    content: 'In a landmark decision that experts are calling a turning point in the fight against climate change, representatives from 195 countries have signed a comprehensive agreement to reduce carbon emissions by 50% by 2035. The agreement, reached after two weeks of intense negotiations, includes binding commitments and financial support for developing nations transitioning to green energy...',
+    image_url: 'https://images.unsplash.com/photo-1569163139599-0f4517e36f51?w=1200&h=800&fit=crop',
+    category: 'World',
+    author_id: 'mock-author-1',
+    status: 'published',
+    is_featured: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    author_name: 'Sarah Mitchell'
+  },
+  {
+    id: '2',
+    title: 'Tech Giants Announce Joint AI Safety Initiative',
+    summary: 'Major technology companies form coalition to establish ethical guidelines for AI development.',
+    content: 'Leading technology companies including Apple, Google, Microsoft, and OpenAI have announced a groundbreaking partnership focused on AI safety and ethics. The initiative will establish industry-wide standards for responsible AI development...',
+    image_url: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&h=600&fit=crop',
+    category: 'Technology',
+    author_id: 'mock-author-2',
+    status: 'published',
+    is_featured: false,
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 3600000).toISOString(),
+    author_name: 'James Chen'
+  },
+  {
+    id: '3',
+    title: 'Champions League Finals Set New Viewership Records',
+    summary: 'Historic match draws over 500 million viewers worldwide as underdog claims victory.',
+    content: 'The UEFA Champions League final between Real Madrid and Manchester City has broken all previous viewership records, with an estimated 500 million people tuning in to watch the thrilling match...',
+    image_url: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&h=600&fit=crop',
+    category: 'Sports',
+    author_id: 'mock-author-3',
+    status: 'published',
+    is_featured: false,
+    created_at: new Date(Date.now() - 7200000).toISOString(),
+    updated_at: new Date(Date.now() - 7200000).toISOString(),
+    author_name: 'Marcus Johnson'
+  },
+  {
+    id: '4',
+    title: 'Federal Reserve Signals Interest Rate Pause Amid Economic Data',
+    summary: 'Central bank hints at maintaining current rates as inflation shows signs of cooling.',
+    content: 'The Federal Reserve has indicated it may pause its interest rate hikes following the latest economic data showing inflation cooling to its lowest level in two years...',
+    image_url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&h=600&fit=crop',
+    category: 'Business',
+    author_id: 'mock-author-4',
+    status: 'published',
+    is_featured: false,
+    created_at: new Date(Date.now() - 10800000).toISOString(),
+    updated_at: new Date(Date.now() - 10800000).toISOString(),
+    author_name: 'Elena Rodriguez'
+  },
+  {
+    id: '5',
+    title: 'New Study Reveals Breakthrough in Quantum Computing Efficiency',
+    summary: 'Researchers achieve 99.9% accuracy in quantum error correction, paving way for practical applications.',
+    content: 'Scientists at MIT have announced a major breakthrough in quantum computing, achieving unprecedented levels of error correction that could make practical quantum computers a reality within the decade...',
+    image_url: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800&h=600&fit=crop',
+    category: 'Technology',
+    author_id: 'mock-author-5',
+    status: 'published',
+    is_featured: false,
+    created_at: new Date(Date.now() - 14400000).toISOString(),
+    updated_at: new Date(Date.now() - 14400000).toISOString(),
+    author_name: 'Dr. Amanda Foster'
+  },
+  {
+    id: '6',
+    title: 'Senate Passes Landmark Infrastructure Bill with Bipartisan Support',
+    summary: 'Historic $1.2 trillion investment to modernize roads, bridges, and broadband access.',
+    content: 'The U.S. Senate has passed a comprehensive infrastructure bill with rare bipartisan support, allocating unprecedented funding for modernizing the nations transportation networks...',
+    image_url: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=800&h=600&fit=crop',
+    category: 'Politics',
+    author_id: 'mock-author-6',
+    status: 'published',
+    is_featured: false,
+    created_at: new Date(Date.now() - 18000000).toISOString(),
+    updated_at: new Date(Date.now() - 18000000).toISOString(),
+    author_name: 'Robert Williams'
+  },
+  {
+    id: '7',
+    title: 'Oscar-Winning Director Announces Epic Space Trilogy',
+    summary: 'Christopher Nolan returns with ambitious three-part saga exploring humanity\'s cosmic future.',
+    content: 'Academy Award-winning director Christopher Nolan has revealed plans for an ambitious space trilogy that will explore humanity\'s expansion into the solar system...',
+    image_url: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=800&h=600&fit=crop',
+    category: 'Entertainment',
+    author_id: 'mock-author-7',
+    status: 'published',
+    is_featured: false,
+    created_at: new Date(Date.now() - 21600000).toISOString(),
+    updated_at: new Date(Date.now() - 21600000).toISOString(),
+    author_name: 'Lisa Thompson'
+  },
+  {
+    id: '8',
+    title: 'Revolutionary Cancer Treatment Shows 90% Success Rate in Trials',
+    summary: 'New immunotherapy approach offers hope for patients with previously untreatable cancers.',
+    content: 'A groundbreaking cancer treatment developed by researchers at Johns Hopkins has shown remarkable results in clinical trials, with 90% of patients experiencing significant tumor reduction...',
+    image_url: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&h=600&fit=crop',
+    category: 'Health',
+    author_id: 'mock-author-8',
+    status: 'published',
+    is_featured: false,
+    created_at: new Date(Date.now() - 25200000).toISOString(),
+    updated_at: new Date(Date.now() - 25200000).toISOString(),
+    author_name: 'Dr. Michael Chang'
+  },
+];
+
+export const bundleSources = {
+  'Source A': [
+    { id: 'a1', title: 'Breaking: Major Policy Shift Expected', category: 'Politics', time: '5 min ago' },
+    { id: 'a2', title: 'Stock Markets Rally on Economic News', category: 'Business', time: '15 min ago' },
+    { id: 'a3', title: 'Tech Startup Raises $500M Series D', category: 'Technology', time: '30 min ago' },
+    { id: 'a4', title: 'International Trade Talks Resume', category: 'World', time: '1 hour ago' },
+  ],
+  'Source B': [
+    { id: 'b1', title: 'Championship Game Goes to Overtime', category: 'Sports', time: '10 min ago' },
+    { id: 'b2', title: 'New Film Breaks Box Office Records', category: 'Entertainment', time: '25 min ago' },
+    { id: 'b3', title: 'Scientists Discover New Species', category: 'Science', time: '45 min ago' },
+    { id: 'b4', title: 'Weather Alert: Storm Approaching', category: 'World', time: '2 hours ago' },
+  ],
+  'Source C': [
+    { id: 'c1', title: 'Healthcare Reform Debate Continues', category: 'Politics', time: '8 min ago' },
+    { id: 'c2', title: 'AI Startup Revolutionizes Industry', category: 'Technology', time: '20 min ago' },
+    { id: 'c3', title: 'Olympic Committee Makes Announcement', category: 'Sports', time: '40 min ago' },
+    { id: 'c4', title: 'Celebrity Wedding Makes Headlines', category: 'Entertainment', time: '1.5 hours ago' },
+  ],
+  'RSS Feed': [
+    { id: 'd1', title: 'Global Markets Update: Asia Opens Higher', category: 'Business', time: '3 min ago' },
+    { id: 'd2', title: 'Space Agency Reveals Mission Plans', category: 'Science', time: '12 min ago' },
+    { id: 'd3', title: 'Election Results Spark Celebrations', category: 'Politics', time: '35 min ago' },
+    { id: 'd4', title: 'New Study Links Diet to Longevity', category: 'Health', time: '50 min ago' },
+  ],
+};

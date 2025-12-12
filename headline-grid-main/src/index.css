@@ -1,0 +1,261 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* News-inspired color palette - Deep red accents */
+    --background: 0 0% 98%;
+    --foreground: 220 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 15%;
+
+    /* News Red - CNN/BBC inspired */
+    --primary: 0 85% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 15% 25%;
+
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent: 220 14% 92%;
+    --accent-foreground: 220 15% 15%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 0 85% 45%;
+
+    --radius: 0.5rem;
+
+    /* Custom tokens */
+    --news-red: 0 85% 45%;
+    --news-red-dark: 0 85% 35%;
+    --news-headline: 220 25% 10%;
+    --news-body: 220 10% 30%;
+    --news-meta: 220 8% 55%;
+    --news-divider: 220 13% 88%;
+    
+    /* Category colors */
+    --category-politics: 210 100% 45%;
+    --category-tech: 270 70% 55%;
+    --category-sports: 140 70% 40%;
+    --category-business: 35 90% 50%;
+    --category-world: 190 80% 45%;
+    --category-entertainment: 330 80% 55%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 0 85% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 220 15% 15%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 0 85% 45%;
+  }
+
+  .dark {
+    --background: 220 20% 8%;
+    --foreground: 0 0% 95%;
+
+    --card: 220 20% 10%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 220 20% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 0 80% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 15%;
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 220 20% 18%;
+    --muted-foreground: 220 10% 60%;
+
+    --accent: 220 20% 20%;
+    --accent-foreground: 0 0% 95%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 0 80% 55%;
+
+    --news-red: 0 80% 55%;
+    --news-red-dark: 0 80% 45%;
+    --news-headline: 0 0% 95%;
+    --news-body: 220 10% 75%;
+    --news-meta: 220 10% 55%;
+    --news-divider: 220 20% 22%;
+
+    --sidebar-background: 220 20% 10%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 0 80% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 18%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 0 80% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight;
+  }
+}
+
+@layer components {
+  .headline-xl {
+    @apply font-serif text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight;
+    color: hsl(var(--news-headline));
+  }
+
+  .headline-lg {
+    @apply font-serif text-2xl md:text-3xl font-bold leading-snug tracking-tight;
+    color: hsl(var(--news-headline));
+  }
+
+  .headline-md {
+    @apply font-serif text-xl md:text-2xl font-semibold leading-snug;
+    color: hsl(var(--news-headline));
+  }
+
+  .headline-sm {
+    @apply font-serif text-lg font-semibold leading-snug;
+    color: hsl(var(--news-headline));
+  }
+
+  .body-text {
+    @apply font-serif text-lg leading-relaxed;
+    color: hsl(var(--news-body));
+  }
+
+  .meta-text {
+    @apply font-sans text-sm font-medium uppercase tracking-wide;
+    color: hsl(var(--news-meta));
+  }
+
+  .news-divider {
+    @apply border-t;
+    border-color: hsl(var(--news-divider));
+  }
+
+  .category-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-sm text-xs font-bold uppercase tracking-wider;
+  }
+
+  .category-politics {
+    @apply bg-blue-600/10 text-blue-700;
+  }
+
+  .category-tech {
+    @apply bg-purple-600/10 text-purple-700;
+  }
+
+  .category-sports {
+    @apply bg-green-600/10 text-green-700;
+  }
+
+  .category-business {
+    @apply bg-amber-600/10 text-amber-700;
+  }
+
+  .category-world {
+    @apply bg-cyan-600/10 text-cyan-700;
+  }
+
+  .category-entertainment {
+    @apply bg-pink-600/10 text-pink-700;
+  }
+
+  .news-card {
+    @apply bg-card rounded-lg overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .news-card-featured {
+    @apply relative overflow-hidden rounded-lg;
+  }
+
+  .gradient-overlay {
+    @apply absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent;
+  }
+
+  .live-indicator {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider rounded-sm;
+  }
+
+  .live-indicator::before {
+    content: '';
+    @apply w-2 h-2 bg-white rounded-full animate-pulse;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out forwards;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
