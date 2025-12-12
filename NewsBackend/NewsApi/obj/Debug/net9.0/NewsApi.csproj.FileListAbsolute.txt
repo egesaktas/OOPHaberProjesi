@@ -34,3 +34,4 @@
 /Users/ege/Desktop/IFADE/NewsBackend/NewsApi/obj/Debug/net9.0/NewsApi.pdb
 /Users/ege/Desktop/IFADE/NewsBackend/NewsApi/obj/Debug/net9.0/NewsApi.genruntimeconfig.cache
 /Users/ege/Desktop/IFADE/NewsBackend/NewsApi/obj/Debug/net9.0/ref/NewsApi.dll
+/Users/ege/Desktop/IFADE/NewsBackend/NewsApi/obj/Debug/net9.0/NewsApi.sourcelink.json
