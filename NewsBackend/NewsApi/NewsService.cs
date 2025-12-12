@@ -21,7 +21,6 @@ namespace NewsApi.Services
         {
             var haberListesi = new List<string>();
             
-            // Test için BBC Türkçe'yi kullanalım, yapıları daha düzenli.
             string url = "https://www.bbc.com/turkce"; 
 
             try
