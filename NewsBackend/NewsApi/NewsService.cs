@@ -3,7 +3,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
-using System.Net; // Karakter düzeltmek için bu kütüphane şart
+using System.Net; 
 
 namespace NewsApi.Services
 {
