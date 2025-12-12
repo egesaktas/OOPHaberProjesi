@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using NewsApi.Services;
-using System.Threading.Tasks; // Task kullanımı için bu gerekli
+using System.Threading.Tasks;
 
 namespace NewsApi.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")] // Burası [controller] olmalı (tekil)
+    [Route("api/[controller]")] 
     public class NewsController : ControllerBase
     {
         private readonly HaberServisi _haberServisi;
