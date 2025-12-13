@@ -1,5 +1,6 @@
 using HtmlAgilityPack;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
@@ -7,6 +8,8 @@ using System.Net;
 using System.Linq;
 using System.Text;
 using System.Xml.Linq; // RSS okumak için gerekli
+using Microsoft.Extensions.Options;
+using NewsApi.Storage;
 
 namespace NewsApi.Services
 {
@@ -29,41 +32,66 @@ namespace NewsApi.Services
     public class HaberServisi
     {
         private readonly HttpClient _httpClient;
+        private readonly INewsStore _newsStore;
+        private readonly TimeSpan _listTtl;
 
-        public HaberServisi()
+        public HaberServisi(HttpClient httpClient, INewsStore newsStore, IOptions<NewsCacheOptions> options)
         {
-            _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            _httpClient = httpClient;
+            _newsStore = newsStore;
+            _listTtl = TimeSpan.FromSeconds(Math.Max(0, options.Value.ListTtlSeconds));
         }
 
         // --- RSS İLE GARANTİLİ LİSTELEME ---
         public async Task<List<HaberOzet>> HaberleriGetir()
         {
+            var cached = await _newsStore.GetLatestListAsync(CancellationToken.None);
+            if (cached != null && _listTtl > TimeSpan.Zero && (DateTimeOffset.UtcNow - cached.FetchedAtUtc) <= _listTtl)
+            {
+                return cached.Items;
+            }
+
             var haberListesi = new List<HaberOzet>();
 
             // Konsola bilgi yazalım (Terminalden takip edebilirsin)
             Console.WriteLine("Haberler çekiliyor...");
 
-            // 1. GÜNDEM (BBC ve CNN Karışık)
-            await RssCek("BBC Türkçe", "http://feeds.bbci.co.uk/turkce/rss.xml", "Gündem", haberListesi);
-            await RssCek("CNN Türk", "https://www.cnnturk.com/feed/rss/all/news", "Gündem", haberListesi);
+            try
+            {
+                // 1. GÜNDEM (BBC ve CNN Karışık)
+                await RssCek("BBC Türkçe", "http://feeds.bbci.co.uk/turkce/rss.xml", "Gündem", haberListesi);
+                await RssCek("CNN Türk", "https://www.cnnturk.com/feed/rss/all/news", "Gündem", haberListesi);
 
-            // 2. SPOR
-            await RssCek("CNN Spor", "https://www.cnnturk.com/feed/rss/spor/news", "Spor", haberListesi);
+                // 2. SPOR
+                await RssCek("CNN Spor", "https://www.cnnturk.com/feed/rss/spor/news", "Spor", haberListesi);
 
-            // 3. EKONOMİ
-            await RssCek("CNN Ekonomi", "https://www.cnnturk.com/feed/rss/ekonomi/news", "Ekonomi", haberListesi);
+                // 3. EKONOMİ
+                await RssCek("CNN Ekonomi", "https://www.cnnturk.com/feed/rss/ekonomi/news", "Ekonomi", haberListesi);
 
-            // 4. MAGAZİN
-            await RssCek("CNN Magazin", "https://www.cnnturk.com/feed/rss/magazin/news", "Magazin", haberListesi);
+                // 4. MAGAZİN
+                await RssCek("CNN Magazin", "https://www.cnnturk.com/feed/rss/magazin/news", "Magazin", haberListesi);
 
-            // 5. TEKNOLOJİ
-            await RssCek("CNN Teknoloji", "https://www.cnnturk.com/feed/rss/bilim-teknoloji/news", "Teknoloji", haberListesi);
+                // 5. TEKNOLOJİ
+                await RssCek("CNN Teknoloji", "https://www.cnnturk.com/feed/rss/bilim-teknoloji/news", "Teknoloji", haberListesi);
 
-            // 6. DÜNYA
-            await RssCek("CNN Dünya", "https://www.cnnturk.com/feed/rss/dunya/news", "Dünya", haberListesi);
+                // 6. DÜNYA
+                await RssCek("CNN Dünya", "https://www.cnnturk.com/feed/rss/dunya/news", "Dünya", haberListesi);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"HATA (RSS genel): {ex.Message}");
+            }
 
             Console.WriteLine($"Toplam {haberListesi.Count} haber çekildi.");
+
+            if (haberListesi.Count > 0)
+            {
+                await _newsStore.SaveLatestListAsync(haberListesi, DateTimeOffset.UtcNow, CancellationToken.None);
+                return haberListesi;
+            }
+
+            // Dış kaynaklar geçici olarak erişilemezse, son kaydedilen listeyi döndür.
+            if (cached != null) return cached.Items;
             return haberListesi;
         }
 
@@ -133,6 +161,13 @@ namespace NewsApi.Services
         // --- DETAY ÇEKME (Burası HTML Agility Pack ile devam ediyor çünkü detay sayfası RSS'te yok) ---
         public async Task<HaberDetay> HaberinDetayiniGetir(string haberUrl)
         {
+            var cached = await _newsStore.GetDetailAsync(haberUrl, CancellationToken.None);
+            if (cached?.Detail != null && !string.IsNullOrWhiteSpace(cached.Detail.Icerik) &&
+                !cached.Detail.Icerik.StartsWith("İçerik yüklenirken hata:", StringComparison.OrdinalIgnoreCase))
+            {
+                return cached.Detail;
+            }
+
             var detay = new HaberDetay { Link = haberUrl };
             try
             {
@@ -175,6 +210,9 @@ namespace NewsApi.Services
             {
                 detay.Icerik = "İçerik yüklenirken hata: " + ex.Message;
             }
+
+            // Ne olursa olsun kaydet: kaynak sayfa sonradan erişilemez olsa bile elimizde içerik kalsın.
+            await _newsStore.SaveDetailAsync(haberUrl, detay, DateTimeOffset.UtcNow, CancellationToken.None);
             return detay;
         }
     }
