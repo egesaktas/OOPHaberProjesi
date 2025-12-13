@@ -13,6 +13,7 @@ export function FeaturedNews({ article }: FeaturedNewsProps) {
   return (
     <Link to={`/news/${article.id}`} className="group block">
       <article className="news-card-featured aspect-[16/9] md:aspect-[21/9]">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-primary/10 to-background" />
         {article.image_url && (
           <img
             src={article.image_url}

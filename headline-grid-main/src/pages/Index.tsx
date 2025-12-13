@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { FeaturedNews } from '@/components/news/FeaturedNews';
@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import type { NewsArticle } from '@/types';
-import { fetchLiveNews, liveSummaryToArticle } from '@/lib/liveNewsApi';
+import { fetchLiveNews, fetchLiveNewsDetail, liveSummaryToArticle } from '@/lib/liveNewsApi';
 
 const LIVE_CATEGORIES = ["Gündem", "Spor", "Ekonomi", "Dünya", "Magazin", "Teknoloji"] as const;
 
@@ -67,6 +67,26 @@ const Index = () => {
 
   const featuredArticle = filteredNews[0];
   const latestNews = featuredArticle ? filteredNews.slice(1) : [];
+  const attemptedHeroImages = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!featuredArticle || loading) return;
+    if (featuredArticle.image_url) return;
+    if (attemptedHeroImages.current.has(featuredArticle.id)) return;
+    attemptedHeroImages.current.add(featuredArticle.id);
+
+    const ac = new AbortController();
+    fetchLiveNewsDetail(featuredArticle.id, ac.signal)
+      .then((detail) => {
+        if (!detail.resimUrl) return;
+        setArticles((prev) =>
+          prev.map((a) => (a.id === featuredArticle.id ? { ...a, image_url: detail.resimUrl } : a))
+        );
+      })
+      .catch(() => {});
+
+    return () => ac.abort();
+  }, [featuredArticle?.id, featuredArticle?.image_url, loading]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -121,7 +141,7 @@ const Index = () => {
         </div>
 
         {/* Featured Section */}
-        {!categoryFilter && !query && !loading && featuredArticle && (
+        {!query && !loading && featuredArticle && (
           <section className="mb-8">
             <FeaturedNews article={featuredArticle} />
           </section>

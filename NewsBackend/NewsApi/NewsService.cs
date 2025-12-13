@@ -86,6 +86,10 @@ namespace NewsApi.Services
 
             if (haberListesi.Count > 0)
             {
+                haberListesi = haberListesi
+                    .OrderByDescending(x => x.YayinTarihi ?? DateTimeOffset.MinValue)
+                    .ThenBy(x => x.Kaynak)
+                    .ToList();
                 await _newsStore.SaveLatestListAsync(haberListesi, DateTimeOffset.UtcNow, CancellationToken.None);
                 return haberListesi;
             }
