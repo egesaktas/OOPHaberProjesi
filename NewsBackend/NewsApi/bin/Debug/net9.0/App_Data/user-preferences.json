@@ -1,0 +1,28 @@
+{
+  "Items": [
+    {
+      "UserId": "a2e3e6ff-9d34-4f96-a89a-1af0fdca741d",
+      "NewsUrl": "https://www.cnnturk.com/turkiye/nacakla-oynadi-felaketi-yasadi-kucuk-cocugun-parmagi-kopma-noktasina-geldi-2371755",
+      "Value": 1,
+      "CreatedAtUtc": "2025-12-13T16:44:20.4544181+00:00"
+    },
+    {
+      "UserId": "a2e3e6ff-9d34-4f96-a89a-1af0fdca741d",
+      "NewsUrl": "https://www.cnnturk.com/dunya/baris-planinda-sok-madde-ukrayna-2027de-abye-giriyor-mu-2371712",
+      "Value": 1,
+      "CreatedAtUtc": "2025-12-13T16:43:40.131624+00:00"
+    },
+    {
+      "UserId": "a2e3e6ff-9d34-4f96-a89a-1af0fdca741d",
+      "NewsUrl": "https://www.cnnturk.com/video/turkiye/trenden-inerken-dustu-engelli-vatandasin-o-anlari-kamerada-2371756",
+      "Value": 1,
+      "CreatedAtUtc": "2025-12-13T16:57:02.6767514+00:00"
+    },
+    {
+      "UserId": "7af19af1-cf11-422f-86b5-4c5f4c5fe667",
+      "NewsUrl": "https://www.cnnturk.com/video/dunya/kim-jong-un-rusyadan-donen-askerlere-tek-tek-sarildi-2371760",
+      "Value": 1,
+      "CreatedAtUtc": "2025-12-13T16:57:40.8218551+00:00"
+    }
+  ]
+}

@@ -16,6 +16,7 @@ namespace NewsApi.Storage
     {
         public DateTimeOffset FetchedAtUtc { get; set; }
         public HaberDetay Detail { get; set; } = new();
+        public float[]? Embedding { get; set; }
     }
 
     public interface INewsStore
@@ -24,7 +25,6 @@ namespace NewsApi.Storage
         Task SaveLatestListAsync(List<HaberOzet> items, DateTimeOffset fetchedAtUtc, CancellationToken cancellationToken);
 
         Task<CachedDetail?> GetDetailAsync(string url, CancellationToken cancellationToken);
-        Task SaveDetailAsync(string url, HaberDetay detail, DateTimeOffset fetchedAtUtc, CancellationToken cancellationToken);
+        Task SaveDetailAsync(string url, HaberDetay detail, DateTimeOffset fetchedAtUtc, float[]? embedding, CancellationToken cancellationToken);
     }
 }
-

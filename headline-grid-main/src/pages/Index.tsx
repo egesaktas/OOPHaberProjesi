@@ -8,9 +8,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import type { NewsArticle } from '@/types';
-import { fetchLiveNews, fetchLiveNewsDetail, liveSummaryToArticle } from '@/lib/liveNewsApi';
+import { fetchLiveNews, fetchLiveNewsDetail, fetchRecommendations, liveSummaryToArticle } from '@/lib/liveNewsApi';
+import { useAuth } from '@/hooks/useAuth';
+import { getEffectiveUserId } from '@/lib/userId';
 
-const LIVE_CATEGORIES = ["Gündem", "Spor", "Ekonomi", "Dünya", "Magazin", "Teknoloji"] as const;
+const LIVE_CATEGORIES = ['Gündem', 'Spor', 'Ekonomi', 'Dünya', 'Magazin', 'Teknoloji'] as const;
 
 const Index = () => {
   const [searchParams] = useSearchParams();
@@ -21,6 +23,10 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [recommended, setRecommended] = useState<NewsArticle[]>([]);
+  const [recommendedError, setRecommendedError] = useState<string | null>(null);
+
+  const { user } = useAuth();
 
   const load = async () => {
     setError(null);
@@ -54,6 +60,25 @@ const Index = () => {
 
     return () => ac.abort();
   }, []);
+
+  useEffect(() => {
+    const ac = new AbortController();
+
+    const userId = getEffectiveUserId(user);
+    setRecommendedError(null);
+
+    fetchRecommendations(userId, ac.signal)
+      .then((data) => {
+        setRecommended(data.map(liveSummaryToArticle));
+      })
+      .catch((e) => {
+        if (e?.name !== 'AbortError') {
+          setRecommendedError(e instanceof Error ? e.message : 'Failed to load recommendations');
+        }
+      });
+
+    return () => ac.abort();
+  }, [user]);
 
   const filteredNews = useMemo(() => {
     let next = articles;
@@ -91,7 +116,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container py-6">
         {/* Top bar */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
@@ -108,36 +133,58 @@ const Index = () => {
           </Button>
         </div>
 
-        {/* Category pills */}
-        <div className="mb-6 overflow-x-auto whitespace-nowrap">
-          <div className="inline-flex gap-2">
-            <Link
-              to={query ? `/?q=${encodeURIComponent(query)}` : '/'}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                !categoryFilter ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-accent'
-              }`}
-            >
-              Tümü
-            </Link>
-            {LIVE_CATEGORIES.map((cat) => {
-              const params = new URLSearchParams();
-              params.set('category', cat);
-              if (query) params.set('q', query);
-              return (
-                <Link
-                  key={cat}
-                  to={`/?${params.toString()}`}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    categoryFilter === cat
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-secondary-foreground hover:bg-accent'
-                  }`}
-                >
-                  {cat}
-                </Link>
-              );
-            })}
+        {/* Category pills + recommendations row */}
+        <div className="mb-6 space-y-4">
+          <div className="overflow-x-auto whitespace-nowrap">
+            <div className="inline-flex gap-2">
+              <Link
+                to={query ? `/?q=${encodeURIComponent(query)}` : '/'}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  !categoryFilter
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-secondary-foreground hover:bg-accent'
+                }`}
+              >
+                Tüm
+              </Link>
+              {LIVE_CATEGORIES.map((cat) => {
+                const params = new URLSearchParams();
+                params.set('category', cat);
+                if (query) params.set('q', query);
+                return (
+                  <Link
+                    key={cat}
+                    to={`/?${params.toString()}`}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      categoryFilter === cat
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-secondary text-secondary-foreground hover:bg-accent'
+                    }`}
+                  >
+                    {cat}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
+
+          {recommended.length > 0 && (
+            <div className="border border-border rounded-lg p-4 bg-card/50">
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <h3 className="font-semibold text-sm tracking-wide uppercase text-muted-foreground">
+                  Sevebileceğin haberler
+                </h3>
+                {recommendedError && (
+                  <p className="text-xs text-destructive">{recommendedError}</p>
+                )}
+              </div>
+              <div className="grid md:grid-cols-3 gap-3">
+                {recommended.map((article) => (
+                  <NewsCard key={article.id} article={article} variant="compact" />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Featured Section */}
@@ -192,7 +239,7 @@ const Index = () => {
           {/* Sidebar */}
           <div className="space-y-6">
             {!loading && articles.length > 0 && <TrendingSidebar articles={articles} />}
-            
+
             {/* Newsletter Signup */}
             <div className="bg-primary text-primary-foreground rounded-lg p-6">
               <h3 className="font-serif font-bold text-xl mb-2">Stay Informed</h3>
@@ -225,26 +272,66 @@ const Index = () => {
             <div>
               <h4 className="font-semibold mb-4">Categories</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link to="/?category=Gündem" className="hover:text-primary transition-colors">Gündem</Link></li>
-                <li><Link to="/?category=Spor" className="hover:text-primary transition-colors">Spor</Link></li>
-                <li><Link to="/?category=Ekonomi" className="hover:text-primary transition-colors">Ekonomi</Link></li>
-                <li><Link to="/?category=Dünya" className="hover:text-primary transition-colors">Dünya</Link></li>
+                <li>
+                  <Link to="/?category=Gündem" className="hover:text-primary transition-colors">
+                    Gündem
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/?category=Spor" className="hover:text-primary transition-colors">
+                    Spor
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/?category=Ekonomi" className="hover:text-primary transition-colors">
+                    Ekonomi
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/?category=Dünya" className="hover:text-primary transition-colors">
+                    Dünya
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">More</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link to="/?category=Magazin" className="hover:text-primary transition-colors">Magazin</Link></li>
-                <li><Link to="/?category=Teknoloji" className="hover:text-primary transition-colors">Teknoloji</Link></li>
+                <li>
+                  <Link to="/?category=Magazin" className="hover:text-primary transition-colors">
+                    Magazin
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/?category=Teknoloji" className="hover:text-primary transition-colors">
+                    Teknoloji
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">About Us</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Careers</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Privacy Policy</a></li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    About Us
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Contact
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Careers
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Privacy Policy
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
@@ -258,3 +345,4 @@ const Index = () => {
 };
 
 export default Index;
+

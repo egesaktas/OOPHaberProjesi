@@ -80,13 +80,18 @@ namespace NewsApi.Storage
             }
         }
 
-        public async Task SaveDetailAsync(string url, HaberDetay detail, DateTimeOffset fetchedAtUtc, CancellationToken cancellationToken)
+        public async Task SaveDetailAsync(string url, HaberDetay detail, DateTimeOffset fetchedAtUtc, float[]? embedding, CancellationToken cancellationToken)
         {
             await _gate.WaitAsync(cancellationToken);
             try
             {
                 var cache = await ReadAsync(cancellationToken);
-                cache.DetailsByUrl[url] = new CachedDetail { FetchedAtUtc = fetchedAtUtc, Detail = detail };
+                cache.DetailsByUrl[url] = new CachedDetail
+                {
+                    FetchedAtUtc = fetchedAtUtc,
+                    Detail = detail,
+                    Embedding = embedding
+                };
                 PruneIfNeeded(cache);
                 await WriteAsync(cache, cancellationToken);
             }

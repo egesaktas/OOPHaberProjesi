@@ -26,7 +26,7 @@ namespace NewsApi.Services
 
     public class HaberDetay : HaberOzet
     {
-        public string Icerik { get; set; } = ""; 
+        public string Icerik { get; set; } = "";
     }
 
     public class HaberServisi
@@ -34,11 +34,13 @@ namespace NewsApi.Services
         private readonly HttpClient _httpClient;
         private readonly INewsStore _newsStore;
         private readonly TimeSpan _listTtl;
+        private readonly IEmbeddingService _embeddingService;
 
-        public HaberServisi(HttpClient httpClient, INewsStore newsStore, IOptions<NewsCacheOptions> options)
+        public HaberServisi(HttpClient httpClient, INewsStore newsStore, IEmbeddingService embeddingService, IOptions<NewsCacheOptions> options)
         {
             _httpClient = httpClient;
             _newsStore = newsStore;
+            _embeddingService = embeddingService;
             _listTtl = TimeSpan.FromSeconds(Math.Max(0, options.Value.ListTtlSeconds));
         }
 
@@ -53,28 +55,17 @@ namespace NewsApi.Services
 
             var haberListesi = new List<HaberOzet>();
 
-            // Konsola bilgi yazalım (Terminalden takip edebilirsin)
             Console.WriteLine("Haberler çekiliyor...");
 
             try
             {
-                // 1. GÜNDEM (BBC ve CNN Karışık)
                 await RssCek("BBC Türkçe", "http://feeds.bbci.co.uk/turkce/rss.xml", "Gündem", haberListesi);
                 await RssCek("CNN Türk", "https://www.cnnturk.com/feed/rss/all/news", "Gündem", haberListesi);
 
-                // 2. SPOR
                 await RssCek("CNN Spor", "https://www.cnnturk.com/feed/rss/spor/news", "Spor", haberListesi);
-
-                // 3. EKONOMİ
                 await RssCek("CNN Ekonomi", "https://www.cnnturk.com/feed/rss/ekonomi/news", "Ekonomi", haberListesi);
-
-                // 4. MAGAZİN
                 await RssCek("CNN Magazin", "https://www.cnnturk.com/feed/rss/magazin/news", "Magazin", haberListesi);
-
-                // 5. TEKNOLOJİ
                 await RssCek("CNN Teknoloji", "https://www.cnnturk.com/feed/rss/bilim-teknoloji/news", "Teknoloji", haberListesi);
-
-                // 6. DÜNYA
                 await RssCek("CNN Dünya", "https://www.cnnturk.com/feed/rss/dunya/news", "Dünya", haberListesi);
             }
             catch (Exception ex)
@@ -94,12 +85,10 @@ namespace NewsApi.Services
                 return haberListesi;
             }
 
-            // Dış kaynaklar geçici olarak erişilemezse, son kaydedilen listeyi döndür.
             if (cached != null) return cached.Items;
             return haberListesi;
         }
 
-        // RSS Okuma Fonksiyonu (XML Parser)
         private async Task RssCek(string kaynakAdi, string rssUrl, string sabitKategori, List<HaberOzet> liste)
         {
             try
@@ -107,16 +96,14 @@ namespace NewsApi.Services
                 var response = await _httpClient.GetStringAsync(rssUrl);
                 var xmlDoc = XDocument.Parse(response);
 
-                // RSS içindeki <item> etiketlerini bul
-                var items = xmlDoc.Descendants("item").Take(15); // Her kategoriden en fazla 15 haber
+                var items = xmlDoc.Descendants("item").Take(15);
 
                 foreach (var item in items)
                 {
                     string baslik = item.Element("title")?.Value.Trim() ?? "";
                     string link = item.Element("link")?.Value.Trim() ?? "";
                     string zamanHam = item.Element("pubDate")?.Value ?? "";
-                    
-                    // Zamanı güzelleştir (Örn: "Sat, 12 Dec..." -> "12:30")
+
                     string zaman = "Yeni";
                     DateTimeOffset? yayinTarihi = null;
                     if (DateTimeOffset.TryParse(zamanHam, out var dateValue))
@@ -125,14 +112,12 @@ namespace NewsApi.Services
                         zaman = dateValue.ToLocalTime().ToString("HH:mm");
                     }
 
-                    // Resim bulmaya çalış (RSS'te bazen 'image', bazen 'enclosure' olur)
                     string resim = "";
                     var imageEl = item.Element("image");
                     if (imageEl != null) resim = imageEl.Element("url")?.Value ?? "";
-                    
+
                     if (string.IsNullOrEmpty(resim))
                     {
-                        // Media content kontrolü (CNN genelde buraya koyar)
                         XNamespace media = "http://search.yahoo.com/mrss/";
                         var mediaContent = item.Element(media + "content");
                         if (mediaContent != null) resim = mediaContent.Attribute("url")?.Value ?? "";
@@ -149,7 +134,7 @@ namespace NewsApi.Services
                                 Kaynak = kaynakAdi,
                                 Kategori = sabitKategori,
                                 Zaman = zaman,
-                                ResimUrl = resim ?? "", // Resim yoksa boş kalsın
+                                ResimUrl = resim ?? "",
                                 YayinTarihi = yayinTarihi
                             });
                         }
@@ -162,7 +147,7 @@ namespace NewsApi.Services
             }
         }
 
-        // --- DETAY ÇEKME (Burası HTML Agility Pack ile devam ediyor çünkü detay sayfası RSS'te yok) ---
+        // --- DETAY ÇEKME (HTML Agility Pack) ---
         public async Task<HaberDetay> HaberinDetayiniGetir(string haberUrl)
         {
             var cached = await _newsStore.GetDetailAsync(haberUrl, CancellationToken.None);
@@ -175,33 +160,27 @@ namespace NewsApi.Services
             var detay = new HaberDetay { Link = haberUrl };
             try
             {
-                // HTML'i indir
                 var response = await _httpClient.GetStringAsync(haberUrl);
                 var htmlDoc = new HtmlDocument();
                 htmlDoc.LoadHtml(response);
 
-                // Başlığı al
                 var h1 = htmlDoc.DocumentNode.SelectSingleNode("//h1");
                 detay.Baslik = h1 != null ? WebUtility.HtmlDecode(h1.InnerText.Trim()) : "Başlık yükleniyor...";
 
-                // Resmi al (Büyük resim)
                 var metaImg = htmlDoc.DocumentNode.SelectSingleNode("//meta[@property='og:image']");
                 if (metaImg != null) detay.ResimUrl = metaImg.GetAttributeValue("content", "");
 
-                // İçeriği al (Paragrafları topla)
                 var sb = new StringBuilder();
-                var paragraflar = htmlDoc.DocumentNode.SelectNodes("//p"); // Sayfadaki tüm paragraflar
+                var paragraflar = htmlDoc.DocumentNode.SelectNodes("//p");
 
                 if (paragraflar != null)
                 {
                     foreach (var p in paragraflar)
                     {
                         string text = WebUtility.HtmlDecode(p.InnerText.Trim());
-                        // Filtreleme: Çok kısa yazıları ve reklamları atla
-                        if (!string.IsNullOrEmpty(text) && text.Length > 30 && 
-                            !text.Contains("BBC News") && 
-                            !text.Contains("copyright") && 
-                            !text.Contains("BİST"))
+                        if (!string.IsNullOrEmpty(text) && text.Length > 30 &&
+                            !text.Contains("BBC News", StringComparison.OrdinalIgnoreCase) &&
+                            !text.Contains("copyright", StringComparison.OrdinalIgnoreCase))
                         {
                             sb.AppendLine(text);
                             sb.AppendLine();
@@ -215,9 +194,27 @@ namespace NewsApi.Services
                 detay.Icerik = "İçerik yüklenirken hata: " + ex.Message;
             }
 
-            // Ne olursa olsun kaydet: kaynak sayfa sonradan erişilemez olsa bile elimizde içerik kalsın.
-            await _newsStore.SaveDetailAsync(haberUrl, detay, DateTimeOffset.UtcNow, CancellationToken.None);
+            float[]? embedding = null;
+            try
+            {
+                var contentForEmbedding = detay.Icerik;
+                if (!string.IsNullOrWhiteSpace(contentForEmbedding))
+                {
+                    if (contentForEmbedding.Length > 2000)
+                    {
+                        contentForEmbedding = contentForEmbedding.Substring(0, 2000);
+                    }
+                    embedding = await _embeddingService.EmbedAsync(contentForEmbedding, CancellationToken.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Embedding hatası: {ex.Message}");
+            }
+
+            await _newsStore.SaveDetailAsync(haberUrl, detay, DateTimeOffset.UtcNow, embedding, CancellationToken.None);
             return detay;
         }
     }
 }
+

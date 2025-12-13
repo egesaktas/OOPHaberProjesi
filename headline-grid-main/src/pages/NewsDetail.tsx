@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Share2, Clock, User, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Share2, Clock, User, ExternalLink, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { env, isSupabaseConfigured } from '@/lib/env';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { getEffectiveUserId } from '@/lib/userId';
+import { sendFeedback } from '@/lib/userPreferencesApi';
 import type { NewsArticle } from '@/types';
 import {
   decodeBase64UrlToUrl,
@@ -24,6 +27,7 @@ import {
 
 const NewsDetail = () => {
   const { id } = useParams();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +36,7 @@ const NewsDetail = () => {
   const [relatedLive, setRelatedLive] = useState<NewsArticle[]>([]);
 
   const [supabaseArticle, setSupabaseArticle] = useState<NewsArticle | null>(null);
+  const [feedbackValue, setFeedbackValue] = useState<1 | -1 | 0>(0);
 
   useEffect(() => {
     if (!id) return;
@@ -136,6 +141,25 @@ const NewsDetail = () => {
     return '';
   }, [unified]);
 
+  const handleFeedback = async (value: 1 | -1) => {
+    if (unified.kind !== 'live' || !unified.article.link) return;
+
+    const userId = getEffectiveUserId(user);
+    setFeedbackValue(value);
+
+    try {
+      await sendFeedback({
+        userId,
+        newsUrl: unified.article.link,
+        value,
+      });
+      toast.success(value === 1 ? 'Beğendin olarak kaydedildi' : 'Beğenmedin olarak kaydedildi');
+    } catch (e) {
+      console.error(e);
+      toast.error('Tercih kaydedilemedi');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -207,9 +231,28 @@ const NewsDetail = () => {
                 </span>
               </div>
               <div className="flex-1" />
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
+              <div className="flex items-center gap-2">
+                {unified.kind === 'live' && unified.article.link && (
+                  <div className="flex gap-1 mr-2" aria-label="Like or dislike this article">
+                    <Button
+                      variant={feedbackValue === 1 ? 'default' : 'outline'}
+                      size="icon"
+                      onClick={() => handleFeedback(1)}
+                    >
+                      <ThumbsUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant={feedbackValue === -1 ? 'default' : 'outline'}
+                      size="icon"
+                      onClick={() => handleFeedback(-1)}
+                    >
+                      <ThumbsDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
                   size="icon"
                   onClick={async () => {
                     try {
@@ -233,6 +276,7 @@ const NewsDetail = () => {
                     </a>
                   </Button>
                 )}
+                </div>
               </div>
             </div>
           </header>

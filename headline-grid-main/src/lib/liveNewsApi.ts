@@ -52,6 +52,15 @@ export async function fetchLiveNewsDetail(encodedUrl: string, signal?: AbortSign
   return (await res.json()) as LiveNewsDetail;
 }
 
+export async function fetchRecommendations(userId: string, signal?: AbortSignal) {
+  const res = await fetch(
+    `${env.newsApiBaseUrl}/api/news/recommendations?userId=${encodeURIComponent(userId)}`,
+    { signal }
+  );
+  if (!res.ok) throw new Error(`Recommendations API error (${res.status})`);
+  return (await res.json()) as LiveNewsSummary[];
+}
+
 export function liveSummaryToArticle(item: LiveNewsSummary): NewsArticle {
   const createdAt = item.yayinTarihi || new Date().toISOString();
   return {
@@ -69,4 +78,3 @@ export function liveSummaryToArticle(item: LiveNewsSummary): NewsArticle {
     author_name: item.kaynak,
   };
 }
-
