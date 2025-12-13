@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { FeaturedNews } from '@/components/news/FeaturedNews';
@@ -12,8 +12,18 @@ import { fetchLiveNewsDetail, fetchLiveNewsPage, fetchRecommendations, liveSumma
 import { useAuth } from '@/hooks/useAuth';
 import { getEffectiveUserId } from '@/lib/userId';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
+import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 
 const LIVE_CATEGORIES = ['Gündem', 'Spor', 'Ekonomi', 'Dünya', 'Magazin', 'Teknoloji'] as const;
+
+const LIVE_TO_SUPABASE_CATEGORY: Record<string, string> = {
+  Gündem: 'Politics',
+  Spor: 'Sports',
+  Ekonomi: 'Business',
+  Dünya: 'World',
+  Magazin: 'Entertainment',
+  Teknoloji: 'Technology',
+};
 
 const Index = () => {
   const [searchParams] = useSearchParams();
@@ -28,9 +38,11 @@ const Index = () => {
   const [total, setTotal] = useState<number | null>(null);
   const [recommended, setRecommended] = useState<NewsArticle[]>([]);
   const [recommendedError, setRecommendedError] = useState<string | null>(null);
+  const [independentArticles, setIndependentArticles] = useState<NewsArticle[]>([]);
+  const [independentError, setIndependentError] = useState<string | null>(null);
 
   const { user } = useAuth();
-  const pageSize = 20;
+  const pageSize = 50;
 
   const loadFirstPage = useCallback(
     async (signal?: AbortSignal) => {
@@ -41,8 +53,8 @@ const Index = () => {
         const { items, total } = await fetchLiveNewsPage({
           skip: 0,
           take: pageSize,
-          category: categoryFilter,
-          q: query,
+          category: categoryFilter || undefined,
+          q: query || undefined,
           signal,
         });
         setArticles(items.map(liveSummaryToArticle));
@@ -68,8 +80,8 @@ const Index = () => {
       const { items, total: nextTotal } = await fetchLiveNewsPage({
         skip: articles.length,
         take: pageSize,
-        category: categoryFilter,
-        q: query,
+        category: categoryFilter || undefined,
+        q: query || undefined,
       });
 
       setArticles((prev) => {
@@ -110,6 +122,25 @@ const Index = () => {
     return () => ac.abort();
   }, [user]);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    setIndependentError(null);
+    supabase
+      .from('news')
+      .select('*')
+      .eq('status', 'published')
+      .order('created_at', { ascending: false })
+      .limit(12)
+      .then(({ data, error }) => {
+        if (error) {
+          setIndependentError(error.message);
+          return;
+        }
+        setIndependentArticles((data ?? []) as NewsArticle[]);
+      });
+  }, []);
+
   const featuredArticle = articles[0];
   const latestNews = featuredArticle ? articles.slice(1) : [];
   const attemptedHeroImages = useRef<Set<string>>(new Set());
@@ -135,10 +166,10 @@ const Index = () => {
   }, [featuredArticle?.id, featuredArticle?.image_url, loading]);
 
   useEffect(() => {
-    if (loading) return;
-    const missing = articles
+      if (loading) return;
+      const missing = articles
       .filter((a) => !a.image_url && !attemptedThumbImages.current.has(a.id))
-      .slice(0, 8);
+        .slice(0, 8);
     if (missing.length === 0) return;
 
     const ac = new AbortController();
@@ -156,7 +187,9 @@ const Index = () => {
           try {
             const detail = await fetchLiveNewsDetail(next.id, ac.signal);
             if (detail.resimUrl) {
-              setArticles((prev) => prev.map((p) => (p.id === next.id ? { ...p, image_url: detail.resimUrl } : p)));
+              setArticles((prev) =>
+                prev.map((p) => (p.id === next.id ? { ...p, image_url: detail.resimUrl } : p))
+              );
             }
           } catch {
             // ignore
@@ -167,18 +200,51 @@ const Index = () => {
       await Promise.all(workers);
     };
 
-    run();
-    return () => {
-      stopped = true;
-      ac.abort();
-    };
-  }, [articles, loading]);
+      run();
+      return () => {
+        stopped = true;
+        ac.abort();
+      };
+    }, [articles, loading]);
+
+    // Fill missing thumbnails for recommended articles
+    useEffect(() => {
+      if (!recommended.length) return;
+      const missing = recommended.filter((a) => !a.image_url).slice(0, 12);
+      if (missing.length === 0) return;
+
+      const ac = new AbortController();
+
+      (async () => {
+        for (const item of missing) {
+          try {
+            const detail = await fetchLiveNewsDetail(item.id, ac.signal);
+            if (detail.resimUrl) {
+              setRecommended((prev) =>
+                prev.map((p) => (p.id === item.id ? { ...p, image_url: detail.resimUrl } : p))
+              );
+            }
+          } catch {
+            // ignore
+          }
+        }
+      })();
+
+      return () => ac.abort();
+    }, [recommended]);
 
   const { sentinelRef } = useInfiniteScroll({
     enabled: !loading && !error && (total === null || articles.length < total),
     onLoadMore: loadMore,
     rootMargin: '900px',
   });
+
+  const independentFeatured = useMemo(() => {
+    if (!categoryFilter) return null;
+    const supabaseCategory = LIVE_TO_SUPABASE_CATEGORY[categoryFilter] || null;
+    if (!supabaseCategory) return null;
+    return independentArticles.find((a) => a.category === supabaseCategory) ?? null;
+  }, [categoryFilter, independentArticles]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,10 +271,10 @@ const Index = () => {
           <div className="overflow-x-auto whitespace-nowrap">
             <div className="inline-flex gap-2">
               <Link
-                to={query ? `/?q=${encodeURIComponent(query)}` : '/'}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                to="/"
+                className={`px-4 py-2 rounded-full text-sm font-medium border ${
                   !categoryFilter
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-secondary text-secondary-foreground hover:bg-accent'
                 }`}
               >
@@ -218,13 +284,14 @@ const Index = () => {
                 const params = new URLSearchParams();
                 params.set('category', cat);
                 if (query) params.set('q', query);
+                const isActive = categoryFilter === cat;
                 return (
                   <Link
                     key={cat}
                     to={`/?${params.toString()}`}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      categoryFilter === cat
-                        ? 'bg-primary text-primary-foreground'
+                    className={`px-4 py-2 rounded-full text-sm font-medium border ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground border-primary'
                         : 'bg-secondary text-secondary-foreground hover:bg-accent'
                     }`}
                   >
@@ -235,6 +302,7 @@ const Index = () => {
             </div>
           </div>
 
+          {/* Recommendations row */}
           {recommended.length > 0 && (
             <div className="border border-border rounded-lg p-4 bg-card/50">
               <div className="flex items-center justify-between mb-3 gap-2">
@@ -254,80 +322,95 @@ const Index = () => {
           )}
         </div>
 
-        {/* Featured Section */}
-        {!query && !loading && featuredArticle && (
-          <section className="mb-8">
-            <FeaturedNews article={featuredArticle} />
-          </section>
-        )}
+        {/* Main content grid */}
+        <div className="grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6">
+          <div className="space-y-6">
+            {/* Hero */}
+            {featuredArticle ? (
+              <FeaturedNews article={featuredArticle} />
+            ) : loading ? (
+              <div className="aspect-[16/9] md:aspect-[21/9] rounded-lg bg-card border border-border overflow-hidden">
+                <Skeleton className="w-full h-full" />
+              </div>
+            ) : null}
 
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* News Grid */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="headline-md">Latest News</h2>
-              {error && <span className="text-sm text-destructive">{error}</span>}
+            {/* Latest list */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="headline-md">Latest News</h2>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+              </div>
+
+              {loading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="bg-card border border-border rounded-lg overflow-hidden p-4 flex gap-4"
+                    >
+                      <Skeleton className="w-32 h-24 rounded-lg" />
+                      <div className="flex-1 space-y-3">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-6 w-full" />
+                        <Skeleton className="h-4 w-4/5" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : latestNews.length > 0 ? (
+                <div className="space-y-4">
+                  {latestNews.map((article, index) => (
+                    <div
+                      key={article.id}
+                      className="animate-fade-in"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <NewsCard article={article} variant="horizontal" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">No articles found.</p>
+                </div>
+              )}
+
+              <div ref={sentinelRef} className="h-1" />
+              {loadingMore && (
+                <div className="mt-4 space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="bg-card border border-border rounded-lg overflow-hidden p-4 flex gap-4"
+                    >
+                      <Skeleton className="w-32 h-24 rounded-lg" />
+                      <div className="flex-1 space-y-3">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-6 w-full" />
+                        <Skeleton className="h-4 w-4/5" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!loading && !loadingMore && total !== null && articles.length < total && (
+                <div className="mt-6 flex justify-center">
+                  <Button variant="outline" onClick={loadMore}>
+                    Load more
+                  </Button>
+                </div>
+              )}
             </div>
-
-            {loading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="bg-card border border-border rounded-lg overflow-hidden p-4 flex gap-4">
-                    <Skeleton className="w-32 h-24 rounded-lg" />
-                    <div className="flex-1 space-y-3">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-6 w-full" />
-                      <Skeleton className="h-4 w-4/5" />
-                      <Skeleton className="h-4 w-32" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : latestNews.length > 0 ? (
-              <div className="space-y-4">
-                {latestNews.map((article, index) => (
-                  <div
-                    key={article.id}
-                    className="animate-fade-in"
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <NewsCard article={article} variant="horizontal" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No articles found.</p>
-              </div>
-            )}
-
-            <div ref={sentinelRef} className="h-1" />
-            {loadingMore && (
-              <div className="mt-4 space-y-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="bg-card border border-border rounded-lg overflow-hidden p-4 flex gap-4">
-                    <Skeleton className="w-32 h-24 rounded-lg" />
-                    <div className="flex-1 space-y-3">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-6 w-full" />
-                      <Skeleton className="h-4 w-4/5" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!loading && !loadingMore && total !== null && articles.length < total && (
-              <div className="mt-6 flex justify-center">
-                <Button variant="outline" onClick={loadMore}>
-                  Load more
-                </Button>
-              </div>
-            )}
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {independentFeatured && (
+              <div className="bg-card rounded-lg border border-border overflow-hidden">
+                <NewsCard article={independentFeatured} variant="horizontal" />
+              </div>
+            )}
+
             {!loading && articles.length > 0 && <TrendingSidebar articles={articles} />}
 
             {/* Newsletter Signup */}

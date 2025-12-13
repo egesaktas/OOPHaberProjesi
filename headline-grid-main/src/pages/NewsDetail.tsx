@@ -361,6 +361,17 @@ const NewsDetail = () => {
             )}
           </div>
 
+          {/* Our researchers section for journalist articles */}
+          {unified.kind === 'supabase' && (
+            <section className="mt-8 pt-6 border-t border-border">
+              <h2 className="font-serif font-bold text-lg mb-2">Our researchers</h2>
+              <p className="text-sm text-muted-foreground">
+                Bu haber i-fade araştırmacı gazetecileri tarafından hazırlanmıştır.
+                {unified.article.author_name && ` Sorumlu muhabir: ${unified.article.author_name}.`}
+              </p>
+            </section>
+          )}
+
           {unified.kind === 'live' && (
             <div className="mt-8 pt-6 border-t border-border">
               <div className="flex flex-wrap gap-2 items-center">

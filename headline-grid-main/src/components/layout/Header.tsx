@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, User, Menu, X, Newspaper, LayoutGrid } from 'lucide-react';
+import { Search, User, Menu, X, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,7 +42,14 @@ export function Header() {
         <div className="container flex items-center justify-between h-8 text-xs">
           <span className="font-medium">Breaking News: Stay updated with the latest stories</span>
           <div className="hidden md:flex items-center gap-4">
-            <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            <span>
+              {new Date().toLocaleDateString('tr-TR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </span>
           </div>
         </div>
       </div>
@@ -52,8 +59,11 @@ export function Header() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <Newspaper className="h-8 w-8 text-primary" />
-            <span className="font-serif text-2xl font-bold text-foreground">NewsHub</span>
+            <img
+              src="/logo-ifade.svg"
+              alt="I-FADE"
+              className="h-10 w-auto"
+            />
           </Link>
 
           {/* Desktop Navigation */}
@@ -61,7 +71,7 @@ export function Header() {
             {LIVE_CATEGORIES.map((category) => (
               <Link
                 key={category}
-                to={`/?category=${category}`}
+                to={`/?category=${encodeURIComponent(category)}`}
                 className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
               >
                 {category}
@@ -83,7 +93,7 @@ export function Header() {
               {searchOpen ? (
                 <div className="flex items-center gap-2 animate-scale-in">
                   <Input
-                    placeholder="Search news..."
+                    placeholder="Haberde ara..."
                     className="w-64"
                     autoFocus
                     value={searchValue}
@@ -161,7 +171,7 @@ export function Header() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search news..."
+                placeholder="Haberde ara..."
                 className="pl-10"
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
@@ -177,7 +187,7 @@ export function Header() {
               {LIVE_CATEGORIES.map((category) => (
                 <Link
                   key={category}
-                  to={`/?category=${category}`}
+                  to={`/?category=${encodeURIComponent(category)}`}
                   className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
                 >
@@ -199,3 +209,4 @@ export function Header() {
     </header>
   );
 }
+

@@ -183,6 +183,8 @@ namespace NewsApi.Controllers
 
             if (likeEmbeddings.Count == 0)
             {
+                // No embeddings yet (e.g. AI key not configured) – fall back to a
+                // mix of categories instead of locking completely to one topic.
                 var likedCategories = new HashSet<string>(
                     likes
                         .Select(l => allNews.FirstOrDefault(n => n.Link == l.NewsUrl)?.Kategori)
@@ -190,14 +192,28 @@ namespace NewsApi.Controllers
                         .Cast<string>(),
                     StringComparer.OrdinalIgnoreCase);
 
-                var byCategory = allNews
+                // If we don't even know liked categories, just return the latest items
+                if (likedCategories.Count == 0)
+                {
+                    return Ok(allNews.Take(10).ToList());
+                }
+
+                // Prefer a few items from liked categories, then fill the rest
+                // with other categories to keep the feed diverse.
+                var preferred = allNews
                     .Where(n => likedCategories.Contains(n.Kategori))
-                    .Take(10)
+                    .Take(5)
                     .ToList();
 
-                if (byCategory.Count > 0) return Ok(byCategory);
+                var remainingSlots = Math.Max(0, 10 - preferred.Count);
 
-                return Ok(allNews.Take(10).ToList());
+                var others = allNews
+                    .Where(n => !likedCategories.Contains(n.Kategori))
+                    .Take(remainingSlots)
+                    .ToList();
+
+                var mixed = preferred.Concat(others).Take(10).ToList();
+                return Ok(mixed);
             }
 
             var userEmbedding = AverageEmbedding(likeEmbeddings);
