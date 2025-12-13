@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, User, Menu, X, Newspaper, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,17 +11,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { CATEGORIES } from '@/types';
+
+const LIVE_CATEGORIES = ["Gündem", "Spor", "Ekonomi", "Dünya", "Magazin", "Teknoloji"] as const;
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
   const { user, role, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
+  };
+
+  const applySearch = (q: string) => {
+    const params = new URLSearchParams(location.search);
+    const trimmed = q.trim();
+    if (trimmed) params.set("q", trimmed);
+    else params.delete("q");
+    navigate({ pathname: "/", search: params.toString() ? `?${params.toString()}` : "" });
   };
 
   return (
@@ -47,7 +58,7 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-6">
-            {CATEGORIES.slice(0, 6).map((category) => (
+            {LIVE_CATEGORIES.map((category) => (
               <Link
                 key={category}
                 to={`/?category=${category}`}
@@ -75,7 +86,18 @@ export function Header() {
                     placeholder="Search news..."
                     className="w-64"
                     autoFocus
-                    onBlur={() => setSearchOpen(false)}
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        applySearch(searchValue);
+                        setSearchOpen(false);
+                      }
+                    }}
+                    onBlur={() => {
+                      applySearch(searchValue);
+                      setSearchOpen(false);
+                    }}
                   />
                 </div>
               ) : (
@@ -138,10 +160,21 @@ export function Header() {
           <div className="container py-4 space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search news..." className="pl-10" />
+              <Input
+                placeholder="Search news..."
+                className="pl-10"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    applySearch(searchValue);
+                    setMobileMenuOpen(false);
+                  }
+                }}
+              />
             </div>
             <nav className="grid grid-cols-2 gap-2">
-              {CATEGORIES.map((category) => (
+              {LIVE_CATEGORIES.map((category) => (
                 <Link
                   key={category}
                   to={`/?category=${category}`}

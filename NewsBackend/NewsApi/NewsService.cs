@@ -6,6 +6,7 @@ using System;
 using System.Net;
 using System.Linq;
 using System.Text;
+using System.Xml.Linq; // RSS okumak için gerekli
 
 namespace NewsApi.Services
 {
@@ -13,12 +14,16 @@ namespace NewsApi.Services
     {
         public string Baslik { get; set; } = "";
         public string Link { get; set; } = "";
+        public string ResimUrl { get; set; } = "";
+        public string Kaynak { get; set; } = "";
+        public string Kategori { get; set; } = "";
+        public string Zaman { get; set; } = "";
+        public DateTimeOffset? YayinTarihi { get; set; }
     }
 
     public class HaberDetay : HaberOzet
     {
         public string Icerik { get; set; } = ""; 
-        public string ResimUrl { get; set; } = ""; 
     }
 
     public class HaberServisi
@@ -28,128 +33,148 @@ namespace NewsApi.Services
         public HaberServisi()
         {
             _httpClient = new HttpClient();
-            // Standart bir tarayıcı gibi görünüyoruz
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
-        // --- LİSTELEME (AKILLI FİLTRE EKLENDİ) ---
+        // --- RSS İLE GARANTİLİ LİSTELEME ---
         public async Task<List<HaberOzet>> HaberleriGetir()
         {
             var haberListesi = new List<HaberOzet>();
-            string baseUrl = "https://www.bbc.com";
-            string url = "https://www.bbc.com/turkce";
 
+            // Konsola bilgi yazalım (Terminalden takip edebilirsin)
+            Console.WriteLine("Haberler çekiliyor...");
+
+            // 1. GÜNDEM (BBC ve CNN Karışık)
+            await RssCek("BBC Türkçe", "http://feeds.bbci.co.uk/turkce/rss.xml", "Gündem", haberListesi);
+            await RssCek("CNN Türk", "https://www.cnnturk.com/feed/rss/all/news", "Gündem", haberListesi);
+
+            // 2. SPOR
+            await RssCek("CNN Spor", "https://www.cnnturk.com/feed/rss/spor/news", "Spor", haberListesi);
+
+            // 3. EKONOMİ
+            await RssCek("CNN Ekonomi", "https://www.cnnturk.com/feed/rss/ekonomi/news", "Ekonomi", haberListesi);
+
+            // 4. MAGAZİN
+            await RssCek("CNN Magazin", "https://www.cnnturk.com/feed/rss/magazin/news", "Magazin", haberListesi);
+
+            // 5. TEKNOLOJİ
+            await RssCek("CNN Teknoloji", "https://www.cnnturk.com/feed/rss/bilim-teknoloji/news", "Teknoloji", haberListesi);
+
+            // 6. DÜNYA
+            await RssCek("CNN Dünya", "https://www.cnnturk.com/feed/rss/dunya/news", "Dünya", haberListesi);
+
+            Console.WriteLine($"Toplam {haberListesi.Count} haber çekildi.");
+            return haberListesi;
+        }
+
+        // RSS Okuma Fonksiyonu (XML Parser)
+        private async Task RssCek(string kaynakAdi, string rssUrl, string sabitKategori, List<HaberOzet> liste)
+        {
             try
             {
-                var response = await _httpClient.GetStringAsync(url);
-                var htmlDoc = new HtmlDocument();
-                htmlDoc.LoadHtml(response);
+                var response = await _httpClient.GetStringAsync(rssUrl);
+                var xmlDoc = XDocument.Parse(response);
 
-                var basliklar = htmlDoc.DocumentNode.SelectNodes("//h2 | //h3"); // h3'leri de kapsayalım
+                // RSS içindeki <item> etiketlerini bul
+                var items = xmlDoc.Descendants("item").Take(15); // Her kategoriden en fazla 15 haber
 
-                if (basliklar != null)
+                foreach (var item in items)
                 {
-                    foreach (var baslikNode in basliklar)
+                    string baslik = item.Element("title")?.Value.Trim() ?? "";
+                    string link = item.Element("link")?.Value.Trim() ?? "";
+                    string zamanHam = item.Element("pubDate")?.Value ?? "";
+                    
+                    // Zamanı güzelleştir (Örn: "Sat, 12 Dec..." -> "12:30")
+                    string zaman = "Yeni";
+                    DateTimeOffset? yayinTarihi = null;
+                    if (DateTimeOffset.TryParse(zamanHam, out var dateValue))
                     {
-                        string temizBaslik = WebUtility.HtmlDecode(baslikNode.InnerText.Trim());
-                        
-                        // Linki bul
-                        var linkNode = baslikNode.SelectSingleNode(".//a");
-                        if (linkNode == null && baslikNode.ParentNode.Name == "a")
-                            linkNode = baslikNode.ParentNode;
+                        yayinTarihi = dateValue;
+                        zaman = dateValue.ToLocalTime().ToString("HH:mm");
+                    }
 
-                        string link = linkNode?.GetAttributeValue("href", "") ?? "";
+                    // Resim bulmaya çalış (RSS'te bazen 'image', bazen 'enclosure' olur)
+                    string resim = "";
+                    var imageEl = item.Element("image");
+                    if (imageEl != null) resim = imageEl.Element("url")?.Value ?? "";
+                    
+                    if (string.IsNullOrEmpty(resim))
+                    {
+                        // Media content kontrolü (CNN genelde buraya koyar)
+                        XNamespace media = "http://search.yahoo.com/mrss/";
+                        var mediaContent = item.Element(media + "content");
+                        if (mediaContent != null) resim = mediaContent.Attribute("url")?.Value ?? "";
+                    }
 
-                        // Linki tamamla
-                        if (!string.IsNullOrEmpty(link) && !link.StartsWith("http")) 
-                            link = baseUrl + link;
-
-                        // --- KRİTİK FİLTRELEME ---
-                        // Sadece gerçek haber linklerini alıyoruz.
-                        // Konu sayfalarını (/topics/) ve video sayfalarını (/avaz/) eliyoruz.
-                        bool gercekHaberMi = link.Contains("/haberler/") || link.Contains("/articles/");
-                        
-                        if (gercekHaberMi && !string.IsNullOrWhiteSpace(temizBaslik) && temizBaslik.Length > 15)
+                    if (!string.IsNullOrEmpty(baslik) && !string.IsNullOrEmpty(link))
+                    {
+                        if (!liste.Any(x => x.Baslik == baslik))
                         {
-                            if (!haberListesi.Any(x => x.Baslik == temizBaslik))
+                            liste.Add(new HaberOzet
                             {
-                                haberListesi.Add(new HaberOzet { Baslik = temizBaslik, Link = link });
-                            }
+                                Baslik = baslik,
+                                Link = link,
+                                Kaynak = kaynakAdi,
+                                Kategori = sabitKategori,
+                                Zaman = zaman,
+                                ResimUrl = resim ?? "", // Resim yoksa boş kalsın
+                                YayinTarihi = yayinTarihi
+                            });
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                haberListesi.Add(new HaberOzet { Baslik = "Hata: " + ex.Message });
+                Console.WriteLine($"HATA ({kaynakAdi}): {ex.Message}");
             }
-            return haberListesi;
         }
 
-        // --- DETAY ÇEKME (AGRESİF TARAMA) ---
+        // --- DETAY ÇEKME (Burası HTML Agility Pack ile devam ediyor çünkü detay sayfası RSS'te yok) ---
         public async Task<HaberDetay> HaberinDetayiniGetir(string haberUrl)
         {
             var detay = new HaberDetay { Link = haberUrl };
-
             try
             {
+                // HTML'i indir
                 var response = await _httpClient.GetStringAsync(haberUrl);
                 var htmlDoc = new HtmlDocument();
                 htmlDoc.LoadHtml(response);
 
-                // 1. Başlık
+                // Başlığı al
                 var h1 = htmlDoc.DocumentNode.SelectSingleNode("//h1");
-                detay.Baslik = h1 != null ? WebUtility.HtmlDecode(h1.InnerText.Trim()) : "Başlık Alınamadı";
+                detay.Baslik = h1 != null ? WebUtility.HtmlDecode(h1.InnerText.Trim()) : "Başlık yükleniyor...";
 
-                // 2. Resim (og:image en garantisidir)
+                // Resmi al (Büyük resim)
                 var metaImg = htmlDoc.DocumentNode.SelectSingleNode("//meta[@property='og:image']");
-                if (metaImg != null)
-                    detay.ResimUrl = metaImg.GetAttributeValue("content", "");
+                if (metaImg != null) detay.ResimUrl = metaImg.GetAttributeValue("content", "");
 
-                // 3. İçerik - BRUTE FORCE (Kaba Kuvvet) Yöntemi
-                // Belirli bir div aramak yerine, sayfadaki TÜM paragrafları tarayıp mantıklı olanları alıyoruz.
-                var tumParagraflar = htmlDoc.DocumentNode.SelectNodes("//p");
+                // İçeriği al (Paragrafları topla)
                 var sb = new StringBuilder();
+                var paragraflar = htmlDoc.DocumentNode.SelectNodes("//p"); // Sayfadaki tüm paragraflar
 
-                if (tumParagraflar != null)
+                if (paragraflar != null)
                 {
-                    foreach (var p in tumParagraflar)
+                    foreach (var p in paragraflar)
                     {
                         string text = WebUtility.HtmlDecode(p.InnerText.Trim());
-
-                        // Filtre: Çok kısa yazıları, menüleri, footer yazılarını alma
-                        if (!string.IsNullOrEmpty(text) && text.Length > 25)
+                        // Filtreleme: Çok kısa yazıları ve reklamları atla
+                        if (!string.IsNullOrEmpty(text) && text.Length > 30 && 
+                            !text.Contains("BBC News") && 
+                            !text.Contains("copyright") && 
+                            !text.Contains("BİST"))
                         {
-                            // Yasaklı kelimeler (Reklam vb.)
-                            if (!text.Contains("BBC News") && 
-                                !text.Contains("Telif hakkı") && 
-                                !text.Contains("Gizlilik Politikası"))
-                            {
-                                sb.AppendLine(text);
-                                sb.AppendLine(); 
-                            }
+                            sb.AppendLine(text);
+                            sb.AppendLine();
                         }
                     }
                 }
-
-                if (sb.Length > 0)
-                {
-                    detay.Icerik = sb.ToString();
-                }
-                else
-                {
-                    // Hiçbir şey bulamazsa Meta Description'ı getir
-                    var metaDesc = htmlDoc.DocumentNode.SelectSingleNode("//meta[@name='description']");
-                    detay.Icerik = metaDesc != null 
-                        ? WebUtility.HtmlDecode(metaDesc.GetAttributeValue("content", "")) 
-                        : "İçerik formatı desteklenmiyor, lütfen kaynağa gidin.";
-                }
+                detay.Icerik = sb.Length > 0 ? sb.ToString() : "Haberin detayına giderek okuyabilirsiniz.";
             }
             catch (Exception ex)
             {
-                detay.Icerik = "Hata oluştu: " + ex.Message;
+                detay.Icerik = "İçerik yüklenirken hata: " + ex.Message;
             }
-
             return detay;
         }
     }

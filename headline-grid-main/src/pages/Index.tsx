@@ -1,38 +1,127 @@
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { FeaturedNews } from '@/components/news/FeaturedNews';
 import { NewsCard } from '@/components/news/NewsCard';
 import { TrendingSidebar } from '@/components/news/TrendingSidebar';
-import { mockNews } from '@/data/mockNews';
-import { CATEGORIES } from '@/types';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
+import type { NewsArticle } from '@/types';
+import { fetchLiveNews, liveSummaryToArticle } from '@/lib/liveNewsApi';
+
+const LIVE_CATEGORIES = ["Gündem", "Spor", "Ekonomi", "Dünya", "Magazin", "Teknoloji"] as const;
 
 const Index = () => {
   const [searchParams] = useSearchParams();
   const categoryFilter = searchParams.get('category');
+  const query = searchParams.get('q')?.trim() || '';
 
-  const featuredArticle = mockNews.find((a) => a.is_featured) || mockNews[0];
-  const filteredNews = categoryFilter
-    ? mockNews.filter((a) => a.category === categoryFilter)
-    : mockNews;
-  const latestNews = filteredNews.filter((a) => a.id !== featuredArticle.id);
+  const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+
+  const load = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const data = await fetchLiveNews();
+      setArticles(data.map(liveSummaryToArticle));
+      setLastUpdatedAt(new Date());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load news');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const ac = new AbortController();
+    setError(null);
+    setLoading(true);
+    fetchLiveNews(ac.signal)
+      .then((data) => {
+        setArticles(data.map(liveSummaryToArticle));
+        setLastUpdatedAt(new Date());
+      })
+      .catch((e) => {
+        if (e?.name !== 'AbortError') {
+          setError(e instanceof Error ? e.message : 'Failed to load news');
+        }
+      })
+      .finally(() => setLoading(false));
+
+    return () => ac.abort();
+  }, []);
+
+  const filteredNews = useMemo(() => {
+    let next = articles;
+    if (categoryFilter) next = next.filter((a) => a.category === categoryFilter);
+    if (query) {
+      const q = query.toLowerCase();
+      next = next.filter((a) => a.title.toLowerCase().includes(q));
+    }
+    return next;
+  }, [articles, categoryFilter, query]);
+
+  const featuredArticle = filteredNews[0];
+  const latestNews = featuredArticle ? filteredNews.slice(1) : [];
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
       
       <main className="container py-6">
-        {/* Category Filter Pills */}
-        {categoryFilter && (
-          <div className="mb-6">
-            <h1 className="headline-lg mb-2">{categoryFilter} News</h1>
+        {/* Top bar */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+          <div>
+            <h1 className="headline-lg">{categoryFilter || 'Latest News'}</h1>
             <p className="text-muted-foreground">
-              Latest stories from {categoryFilter.toLowerCase()}
+              {query ? `Results for “${query}”` : 'Live headlines from multiple sources'}
+              {lastUpdatedAt ? ` • Updated ${lastUpdatedAt.toLocaleTimeString()}` : ''}
             </p>
           </div>
-        )}
+          <Button variant="outline" className="gap-2 w-fit" onClick={load} disabled={loading}>
+            <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+            Refresh
+          </Button>
+        </div>
+
+        {/* Category pills */}
+        <div className="mb-6 overflow-x-auto whitespace-nowrap">
+          <div className="inline-flex gap-2">
+            <Link
+              to={query ? `/?q=${encodeURIComponent(query)}` : '/'}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                !categoryFilter ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-accent'
+              }`}
+            >
+              Tümü
+            </Link>
+            {LIVE_CATEGORIES.map((cat) => {
+              const params = new URLSearchParams();
+              params.set('category', cat);
+              if (query) params.set('q', query);
+              return (
+                <Link
+                  key={cat}
+                  to={`/?${params.toString()}`}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    categoryFilter === cat
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-secondary-foreground hover:bg-accent'
+                  }`}
+                >
+                  {cat}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Featured Section */}
-        {!categoryFilter && (
+        {!categoryFilter && !query && !loading && featuredArticle && (
           <section className="mb-8">
             <FeaturedNews article={featuredArticle} />
           </section>
@@ -44,45 +133,45 @@ const Index = () => {
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
               <h2 className="headline-md">Latest News</h2>
-              <div className="hidden md:flex gap-2">
-                {CATEGORIES.slice(0, 4).map((cat) => (
-                  <a
-                    key={cat}
-                    href={`/?category=${cat}`}
-                    className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                      categoryFilter === cat
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary text-secondary-foreground hover:bg-accent'
-                    }`}
-                  >
-                    {cat}
-                  </a>
+              {error && <span className="text-sm text-destructive">{error}</span>}
+            </div>
+
+            {loading ? (
+              <div className="grid md:grid-cols-2 gap-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="bg-card border border-border rounded-lg overflow-hidden">
+                    <Skeleton className="aspect-video w-full" />
+                    <div className="p-4 space-y-3">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-4 w-4/5" />
+                      <Skeleton className="h-4 w-32" />
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {latestNews.map((article, index) => (
-                <div
-                  key={article.id}
-                  className="animate-fade-in"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <NewsCard article={article} />
-                </div>
-              ))}
-            </div>
-
-            {latestNews.length === 0 && (
+            ) : latestNews.length > 0 ? (
+              <div className="grid md:grid-cols-2 gap-6">
+                {latestNews.map((article, index) => (
+                  <div
+                    key={article.id}
+                    className="animate-fade-in"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <NewsCard article={article} />
+                  </div>
+                ))}
+              </div>
+            ) : (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">No articles found in this category.</p>
+                <p className="text-muted-foreground">No articles found.</p>
               </div>
             )}
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
-            <TrendingSidebar articles={mockNews} />
+            {!loading && articles.length > 0 && <TrendingSidebar articles={articles} />}
             
             {/* Newsletter Signup */}
             <div className="bg-primary text-primary-foreground rounded-lg p-6">
@@ -116,25 +205,17 @@ const Index = () => {
             <div>
               <h4 className="font-semibold mb-4">Categories</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {CATEGORIES.slice(0, 4).map((cat) => (
-                  <li key={cat}>
-                    <a href={`/?category=${cat}`} className="hover:text-primary transition-colors">
-                      {cat}
-                    </a>
-                  </li>
-                ))}
+                <li><Link to="/?category=Gündem" className="hover:text-primary transition-colors">Gündem</Link></li>
+                <li><Link to="/?category=Spor" className="hover:text-primary transition-colors">Spor</Link></li>
+                <li><Link to="/?category=Ekonomi" className="hover:text-primary transition-colors">Ekonomi</Link></li>
+                <li><Link to="/?category=Dünya" className="hover:text-primary transition-colors">Dünya</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">More</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {CATEGORIES.slice(4).map((cat) => (
-                  <li key={cat}>
-                    <a href={`/?category=${cat}`} className="hover:text-primary transition-colors">
-                      {cat}
-                    </a>
-                  </li>
-                ))}
+                <li><Link to="/?category=Magazin" className="hover:text-primary transition-colors">Magazin</Link></li>
+                <li><Link to="/?category=Teknoloji" className="hover:text-primary transition-colors">Teknoloji</Link></li>
               </ul>
             </div>
             <div>

@@ -1,39 +1,140 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Share2, Bookmark, Clock, User } from 'lucide-react';
+import { ArrowLeft, Share2, Clock, User, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { CategoryBadge } from '@/components/news/CategoryBadge';
 import { NewsCard } from '@/components/news/NewsCard';
-import { mockNews } from '@/data/mockNews';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/components/ui/sonner';
+import { env, isSupabaseConfigured } from '@/lib/env';
+import { supabase } from '@/integrations/supabase/client';
+import type { NewsArticle } from '@/types';
+import {
+  decodeBase64UrlToUrl,
+  encodeUrlToBase64Url,
+  fetchLiveNews,
+  fetchLiveNewsDetail,
+  isUuid,
+  type LiveNewsDetail,
+  type LiveNewsSummary,
+  liveSummaryToArticle,
+} from '@/lib/liveNewsApi';
 
 const NewsDetail = () => {
   const { id } = useParams();
-  const article = mockNews.find((a) => a.id === id);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!article) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="container py-12 text-center">
-          <h1 className="headline-lg mb-4">Article Not Found</h1>
-          <p className="text-muted-foreground mb-6">
-            The article you're looking for doesn't exist or has been removed.
-          </p>
-          <Button asChild>
-            <Link to="/">Back to Home</Link>
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const [liveSummary, setLiveSummary] = useState<LiveNewsSummary | null>(null);
+  const [liveDetail, setLiveDetail] = useState<LiveNewsDetail | null>(null);
+  const [relatedLive, setRelatedLive] = useState<NewsArticle[]>([]);
 
-  const relatedArticles = mockNews
-    .filter((a) => a.category === article.category && a.id !== article.id)
-    .slice(0, 3);
+  const [supabaseArticle, setSupabaseArticle] = useState<NewsArticle | null>(null);
 
-  const timeAgo = formatDistanceToNow(new Date(article.created_at), { addSuffix: true });
-  const publishDate = format(new Date(article.created_at), 'MMMM d, yyyy');
+  useEffect(() => {
+    if (!id) return;
+    const ac = new AbortController();
+    setLoading(true);
+    setError(null);
+    setLiveSummary(null);
+    setLiveDetail(null);
+    setRelatedLive([]);
+    setSupabaseArticle(null);
+
+    const run = async () => {
+      try {
+        if (isUuid(id)) {
+          if (!isSupabaseConfigured) {
+            setError(
+              "This article looks like a Supabase item, but Supabase isn't configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY."
+            );
+            return;
+          }
+          const { data, error: supaError } = await supabase
+            .from('news')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+          if (supaError) throw supaError;
+          if (!data) {
+            setError('Article not found.');
+            return;
+          }
+          setSupabaseArticle(data as NewsArticle);
+          return;
+        }
+
+        const decodedUrl = decodeBase64UrlToUrl(id);
+        const summaryFallback: LiveNewsSummary = {
+          baslik: 'Loading…',
+          link: decodedUrl,
+          resimUrl: '',
+          kaynak: 'Live',
+          kategori: 'Gündem',
+          zaman: '',
+        };
+        setLiveSummary(summaryFallback);
+
+        const [list, detail] = await Promise.all([
+          fetchLiveNews(ac.signal),
+          fetchLiveNewsDetail(id, ac.signal),
+        ]);
+
+        const summary = list.find((x) => encodeUrlToBase64Url(x.link) === id) || summaryFallback;
+        setLiveSummary(summary);
+        setLiveDetail(detail);
+
+        if (summary.kategori) {
+          const related = list
+            .filter((x) => x.kategori === summary.kategori && encodeUrlToBase64Url(x.link) !== id)
+            .slice(0, 3)
+            .map(liveSummaryToArticle);
+          setRelatedLive(related);
+        }
+      } catch (e) {
+        if (e?.name !== 'AbortError') {
+          setError(e instanceof Error ? e.message : 'Failed to load article');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+    return () => ac.abort();
+  }, [id]);
+
+  const unified = useMemo(() => {
+    if (supabaseArticle) return { kind: 'supabase' as const, article: supabaseArticle };
+    const merged = {
+      ...(liveSummary || {}),
+      ...(liveDetail || {}),
+    } as LiveNewsDetail;
+    return { kind: 'live' as const, article: merged };
+  }, [liveDetail, liveSummary, supabaseArticle]);
+
+  const publishDate = useMemo(() => {
+    if (unified.kind === 'supabase') {
+      return format(new Date(unified.article.created_at), 'MMMM d, yyyy');
+    }
+    if (unified.article?.yayinTarihi) {
+      return format(new Date(unified.article.yayinTarihi), 'MMMM d, yyyy');
+    }
+    return '';
+  }, [unified]);
+
+  const timeAgo = useMemo(() => {
+    if (unified.kind === 'supabase') {
+      return formatDistanceToNow(new Date(unified.article.created_at), { addSuffix: true });
+    }
+    if (unified.article?.yayinTarihi) {
+      return formatDistanceToNow(new Date(unified.article.yayinTarihi), { addSuffix: true });
+    }
+    return '';
+  }, [unified]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,93 +151,142 @@ const NewsDetail = () => {
         </Link>
 
         <article className="max-w-4xl mx-auto">
+          {error && (
+            <div className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+              <p className="font-medium">Couldn’t load the article.</p>
+              <p className="text-sm opacity-90">{error}</p>
+              <div className="mt-3">
+                <Button asChild variant="outline">
+                  <Link to="/">Back to Home</Link>
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Header */}
           <header className="mb-8">
-            <CategoryBadge category={article.category} className="mb-4" />
-            <h1 className="headline-xl mb-4">{article.title}</h1>
-            {article.summary && (
-              <p className="text-xl text-muted-foreground leading-relaxed mb-6">
-                {article.summary}
-              </p>
+            {loading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-6 w-4/5" />
+              </div>
+            ) : (
+              <>
+                <CategoryBadge
+                  category={unified.kind === 'supabase' ? unified.article.category : (unified.article.kategori || '')}
+                  className="mb-4"
+                />
+                <h1 className="headline-xl mb-4">
+                  {unified.kind === 'supabase' ? unified.article.title : unified.article.baslik}
+                </h1>
+                {unified.kind === 'supabase' && unified.article.summary && (
+                  <p className="text-xl text-muted-foreground leading-relaxed mb-6">
+                    {unified.article.summary}
+                  </p>
+                )}
+              </>
             )}
             
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground border-y border-border py-4">
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                <span>By <strong className="text-foreground">{article.author_name || 'Staff Writer'}</strong></span>
+                <span>
+                  By{" "}
+                  <strong className="text-foreground">
+                    {unified.kind === 'supabase'
+                      ? unified.article.author_name || 'Staff Writer'
+                      : unified.article.kaynak || 'Live'}
+                  </strong>
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4" />
-                <span>{publishDate} ({timeAgo})</span>
+                <span>
+                  {publishDate ? `${publishDate}${timeAgo ? ` (${timeAgo})` : ''}` : (unified.kind === 'live' ? unified.article.zaman : '')}
+                </span>
               </div>
               <div className="flex-1" />
               <div className="flex gap-2">
-                <Button variant="ghost" size="icon">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={async () => {
+                    try {
+                      const toCopy =
+                        unified.kind === 'live'
+                          ? unified.article.link
+                          : `${window.location.origin}/news/${unified.article.id}`;
+                      await navigator.clipboard.writeText(toCopy);
+                      toast.success('Link copied');
+                    } catch {
+                      toast.error('Could not copy link');
+                    }
+                  }}
+                >
                   <Share2 className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon">
-                  <Bookmark className="h-4 w-4" />
-                </Button>
+                {unified.kind === 'live' && unified.article.link && (
+                  <Button asChild variant="ghost" size="icon">
+                    <a href={unified.article.link} target="_blank" rel="noreferrer" aria-label="Open original source">
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </Button>
+                )}
               </div>
             </div>
           </header>
 
           {/* Featured Image */}
-          {article.image_url && (
+          {!loading && (unified.kind === 'supabase' ? unified.article.image_url : unified.article.resimUrl) && (
             <figure className="mb-8">
               <img
-                src={article.image_url}
+                src={unified.kind === 'supabase' ? (unified.article.image_url as string) : unified.article.resimUrl}
                 alt=""
                 className="w-full aspect-video object-cover rounded-lg"
               />
-              <figcaption className="mt-2 text-sm text-muted-foreground text-center">
-                Photo: Reuters
-              </figcaption>
+              {unified.kind === 'live' && (
+                <figcaption className="mt-2 text-sm text-muted-foreground text-center">
+                  Source: {unified.article.kaynak}
+                </figcaption>
+              )}
             </figure>
           )}
 
           {/* Content */}
           <div className="prose prose-lg max-w-none">
-            <div className="body-text space-y-6">
-              <p>{article.content}</p>
-              <p>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-              </p>
-              <p>
-                Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-              </p>
-              <blockquote className="border-l-4 border-primary pl-6 italic text-muted-foreground my-8">
-                "This represents a significant milestone in our collective effort to address global challenges through cooperation and shared responsibility."
-              </blockquote>
-              <p>
-                Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
-              </p>
-            </div>
+            {loading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-11/12" />
+                <Skeleton className="h-5 w-10/12" />
+                <Skeleton className="h-5 w-9/12" />
+              </div>
+            ) : (
+              <div className="body-text space-y-6 whitespace-pre-line">
+                {unified.kind === 'supabase' ? unified.article.content : (unified.article.icerik || '')}
+              </div>
+            )}
           </div>
 
-          {/* Tags */}
-          <div className="mt-8 pt-6 border-t border-border">
-            <div className="flex flex-wrap gap-2">
-              <span className="text-sm text-muted-foreground mr-2">Related Topics:</span>
-              <span className="px-3 py-1 bg-secondary text-secondary-foreground text-sm rounded-full">
-                {article.category}
-              </span>
-              <span className="px-3 py-1 bg-secondary text-secondary-foreground text-sm rounded-full">
-                Breaking News
-              </span>
-              <span className="px-3 py-1 bg-secondary text-secondary-foreground text-sm rounded-full">
-                Analysis
-              </span>
+          {unified.kind === 'live' && (
+            <div className="mt-8 pt-6 border-t border-border">
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-sm text-muted-foreground mr-2">API:</span>
+                <code className="px-3 py-1 bg-secondary text-secondary-foreground text-sm rounded-full">
+                  {env.newsApiBaseUrl}
+                </code>
+              </div>
             </div>
-          </div>
+          )}
         </article>
 
         {/* Related Articles */}
-        {relatedArticles.length > 0 && (
+        {unified.kind === 'live' && relatedLive.length > 0 && (
           <section className="max-w-4xl mx-auto mt-12 pt-12 border-t border-border">
             <h2 className="headline-md mb-6">Related Stories</h2>
             <div className="grid md:grid-cols-3 gap-6">
-              {relatedArticles.map((related) => (
+              {relatedLive.map((related) => (
                 <NewsCard key={related.id} article={related} />
               ))}
             </div>

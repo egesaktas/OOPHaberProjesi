@@ -29,11 +29,9 @@ namespace NewsApi.Controllers
         {
             if (string.IsNullOrEmpty(url)) return BadRequest("URL boş olamaz");
 
-            try 
+            try
             {
-                // 1. Frontend'den gelen Base64 string'i normal linke çeviriyoruz
-                byte[] data = Convert.FromBase64String(url);
-                string decodedUrl = Encoding.UTF8.GetString(data);
+                string decodedUrl = DecodeUrlFromBase64(url);
 
                 var detay = await _haberServisi.HaberinDetayiniGetir(decodedUrl);
                 return Ok(detay);
@@ -43,6 +41,23 @@ namespace NewsApi.Controllers
                 // Eğer şifreleme bozuksa veya hata olursa
                 return BadRequest("URL formatı hatalı.");
             }
+        }
+
+        private static string DecodeUrlFromBase64(string input)
+        {
+            // Querystring'te '+' boşluğa dönüşebiliyor; geri al.
+            var normalized = input.Trim().Replace(' ', '+');
+
+            // base64url desteği: '-' -> '+', '_' -> '/', padding ekle.
+            normalized = normalized.Replace('-', '+').Replace('_', '/');
+            var pad = normalized.Length % 4;
+            if (pad != 0)
+            {
+                normalized = normalized.PadRight(normalized.Length + (4 - pad), '=');
+            }
+
+            byte[] data = Convert.FromBase64String(normalized);
+            return Encoding.UTF8.GetString(data);
         }
     }
 }

@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { AppRole } from '@/types';
 import { z } from 'zod';
+import { isSupabaseConfigured } from '@/integrations/supabase/client';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -57,6 +58,11 @@ const Auth = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!isSupabaseConfigured) {
+      toast.error("Supabase isn't configured (missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY).");
+      return;
+    }
+
     if (!validateForm()) return;
 
     setLoading(true);
@@ -146,6 +152,15 @@ const Auth = () => {
                 : 'Join our community of informed readers'}
             </p>
           </div>
+
+          {!isSupabaseConfigured && (
+            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
+              <p className="font-medium">Auth is disabled</p>
+              <p className="text-sm opacity-90">
+                Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to enable login/register.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
@@ -238,7 +253,7 @@ const Auth = () => {
               </div>
             )}
 
-            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+            <Button type="submit" className="w-full" size="lg" disabled={loading || !isSupabaseConfigured}>
               {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
             </Button>
           </form>

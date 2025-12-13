@@ -14,6 +14,12 @@ const categoryStyles: Record<string, string> = {
   Entertainment: 'category-entertainment',
   Science: 'category-tech',
   Health: 'category-sports',
+  Gündem: 'category-politics',
+  Spor: 'category-sports',
+  Ekonomi: 'category-business',
+  Dünya: 'category-world',
+  Magazin: 'category-entertainment',
+  Teknoloji: 'category-tech',
 };
 
 export function CategoryBadge({ category, className }: CategoryBadgeProps) {

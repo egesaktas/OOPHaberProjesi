@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddCors();
 
 // BURASI ÖNEMLİ: Servisi burada tanıtıyoruz
 // Eğer namespace'iniz farklıysa "NewsApi.Services" kısmını düzeltmeniz gerekebilir.
@@ -28,7 +29,10 @@ app.UseCors(x => x
     .SetIsOriginAllowed(origin => true) // localhost'a izin ver
     .AllowCredentials());
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthorization();
 app.MapControllers();
 
