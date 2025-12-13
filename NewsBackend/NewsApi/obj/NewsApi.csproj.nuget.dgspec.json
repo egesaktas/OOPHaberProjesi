@@ -1,32 +1,25 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\ardaa\\Desktop\\OOPHaberProjesi\\NewsBackend\\NewsApi\\NewsApi.csproj": {}
+    "/Users/ege/Desktop/IFADE/NewsBackend/NewsApi/NewsApi.csproj": {}
   },
   "projects": {
-    "C:\\Users\\ardaa\\Desktop\\OOPHaberProjesi\\NewsBackend\\NewsApi\\NewsApi.csproj": {
+    "/Users/ege/Desktop/IFADE/NewsBackend/NewsApi/NewsApi.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\ardaa\\Desktop\\OOPHaberProjesi\\NewsBackend\\NewsApi\\NewsApi.csproj",
+        "projectUniqueName": "/Users/ege/Desktop/IFADE/NewsBackend/NewsApi/NewsApi.csproj",
         "projectName": "NewsApi",
-        "projectPath": "C:\\Users\\ardaa\\Desktop\\OOPHaberProjesi\\NewsBackend\\NewsApi\\NewsApi.csproj",
-        "packagesPath": "C:\\Users\\ardaa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\ardaa\\Desktop\\OOPHaberProjesi\\NewsBackend\\NewsApi\\obj\\",
+        "projectPath": "/Users/ege/Desktop/IFADE/NewsBackend/NewsApi/NewsApi.csproj",
+        "packagesPath": "/Users/ege/.nuget/packages/",
+        "outputPath": "/Users/ege/Desktop/IFADE/NewsBackend/NewsApi/obj/",
         "projectStyle": "PackageReference",
-        "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
-        ],
         "configFilePaths": [
-          "C:\\Users\\ardaa\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+          "/Users/ege/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
         ],
         "sources": {
-          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -83,7 +76,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.305/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

@@ -17,7 +17,7 @@ import type { NewsArticle } from '@/types';
 import {
   decodeBase64UrlToUrl,
   encodeUrlToBase64Url,
-  fetchLiveNews,
+  fetchLiveNewsPage,
   fetchLiveNewsDetail,
   isUuid,
   type LiveNewsDetail,
@@ -37,6 +37,45 @@ const NewsDetail = () => {
 
   const [supabaseArticle, setSupabaseArticle] = useState<NewsArticle | null>(null);
   const [feedbackValue, setFeedbackValue] = useState<1 | -1 | 0>(0);
+
+  const scoreSimilar = (a: string, b: string) => {
+    const stop = new Set([
+      've',
+      'ile',
+      'ama',
+      'fakat',
+      'de',
+      'da',
+      'bir',
+      'bu',
+      'şu',
+      'o',
+      'için',
+      'mi',
+      'mı',
+      'mu',
+      'mü',
+      'ne',
+      'nasıl',
+      'neden',
+      'son',
+      'dakika',
+    ]);
+    const tokens = (s: string) =>
+      s
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((t) => t.length >= 3 && !stop.has(t));
+
+    const aT = tokens(a);
+    const bT = tokens(b);
+    if (aT.length === 0 || bT.length === 0) return 0;
+
+    const aSet = new Set(aT);
+    let hit = 0;
+    for (const t of bT) if (aSet.has(t)) hit++;
+    return hit / Math.sqrt(aT.length * bT.length);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -83,22 +122,31 @@ const NewsDetail = () => {
         };
         setLiveSummary(summaryFallback);
 
-        const [list, detail] = await Promise.all([
-          fetchLiveNews(ac.signal),
+        const [page, detail] = await Promise.all([
+          fetchLiveNewsPage({ skip: 0, take: 200, signal: ac.signal }),
           fetchLiveNewsDetail(id, ac.signal),
         ]);
+        const list = page.items;
 
         const summary = list.find((x) => encodeUrlToBase64Url(x.link) === id) || summaryFallback;
         setLiveSummary(summary);
         setLiveDetail(detail);
 
-        if (summary.kategori) {
-          const related = list
-            .filter((x) => x.kategori === summary.kategori && encodeUrlToBase64Url(x.link) !== id)
-            .slice(0, 3)
-            .map(liveSummaryToArticle);
-          setRelatedLive(related);
-        }
+        const targetTitle = summary.baslik || detail.baslik || '';
+        const related = list
+          .filter((x) => encodeUrlToBase64Url(x.link) !== id)
+          .map((x) => {
+            let score = scoreSimilar(targetTitle, x.baslik || '');
+            if (summary.kategori && x.kategori && x.kategori === summary.kategori) score += 0.25;
+            if (summary.kaynak && x.kaynak && x.kaynak === summary.kaynak) score += 0.05;
+            return { item: x, score };
+          })
+          .filter((x) => x.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+          .map((x) => liveSummaryToArticle(x.item));
+
+        setRelatedLive(related);
       } catch (e) {
         if (e?.name !== 'AbortError') {
           setError(e instanceof Error ? e.message : 'Failed to load article');
@@ -325,14 +373,15 @@ const NewsDetail = () => {
           )}
         </article>
 
-        {/* Related Articles */}
         {unified.kind === 'live' && relatedLive.length > 0 && (
-          <section className="max-w-4xl mx-auto mt-12 pt-12 border-t border-border">
-            <h2 className="headline-md mb-6">Related Stories</h2>
-            <div className="grid md:grid-cols-3 gap-6">
-              {relatedLive.map((related) => (
-                <NewsCard key={related.id} article={related} />
-              ))}
+          <section className="max-w-4xl mx-auto mt-10">
+            <div className="bg-card border border-border rounded-lg p-5">
+              <h2 className="font-serif font-bold text-lg mb-4">Benzer haberler</h2>
+              <div className="space-y-0">
+                {relatedLive.map((related) => (
+                  <NewsCard key={related.id} article={related} variant="compact" />
+                ))}
+              </div>
             </div>
           </section>
         )}

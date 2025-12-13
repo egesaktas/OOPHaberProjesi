@@ -5,7 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { CategoryBadge } from '@/components/news/CategoryBadge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { encodeUrlToBase64Url, fetchLiveNews, type LiveNewsSummary } from '@/lib/liveNewsApi';
+import { encodeUrlToBase64Url, fetchLiveNewsPage, type LiveNewsSummary } from '@/lib/liveNewsApi';
 
 const Bundle = () => {
   const [loading, setLoading] = useState(true);
@@ -16,8 +16,8 @@ const Bundle = () => {
     setError(null);
     setLoading(true);
     try {
-      const data = await fetchLiveNews();
-      setItems(data);
+      const { items } = await fetchLiveNewsPage({ skip: 0, take: 200 });
+      setItems(items);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -29,8 +29,8 @@ const Bundle = () => {
     const ac = new AbortController();
     setError(null);
     setLoading(true);
-    fetchLiveNews(ac.signal)
-      .then(setItems)
+    fetchLiveNewsPage({ skip: 0, take: 200, signal: ac.signal })
+      .then((r) => setItems(r.items))
       .catch((e) => {
         if (e?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
       })

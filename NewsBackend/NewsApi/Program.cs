@@ -9,6 +9,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddCors();
 
 builder.Services.Configure<NewsCacheOptions>(builder.Configuration.GetSection("NewsCache"));
+builder.Services.Configure<ThumbnailPrefetchOptions>(builder.Configuration.GetSection("ThumbnailPrefetch"));
 builder.Services.AddSingleton<INewsStore, FileNewsStore>();
 builder.Services.AddSingleton<IUserPreferenceStore, FileUserPreferenceStore>();
 builder.Services.AddHttpClient<IEmbeddingService, OpenAiEmbeddingService>();
@@ -16,6 +17,7 @@ builder.Services.AddHttpClient<HaberServisi>(client =>
 {
     client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 });
+builder.Services.AddHostedService<ThumbnailPrefetchBackgroundService>();
 
 var app = builder.Build();
 
@@ -40,4 +42,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-

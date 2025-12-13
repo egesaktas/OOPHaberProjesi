@@ -26,21 +26,100 @@ namespace NewsApi.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetNews()
+        public async Task<IActionResult> GetNews(
+            [FromQuery] int skip = 0,
+            [FromQuery] int take = 20,
+            [FromQuery] string? category = null,
+            [FromQuery] string? q = null,
+            CancellationToken cancellationToken = default)
         {
             var haberler = await _haberServisi.HaberleriGetir();
-            return Ok(haberler);
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                var normalized = category.Trim();
+                haberler = haberler
+                    .Where(h => string.Equals(h.Kategori, normalized, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var needle = q.Trim();
+                haberler = haberler
+                    .Where(h =>
+                        (!string.IsNullOrEmpty(h.Baslik) && h.Baslik.Contains(needle, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(h.Kaynak) && h.Kaynak.Contains(needle, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            }
+
+            skip = Math.Max(0, skip);
+            take = Math.Clamp(take, 1, 50);
+
+            var page = haberler.Skip(skip).Take(take).ToList();
+            await PopulateImagesAsync(page, cancellationToken);
+            Response.Headers["X-Total-Count"] = haberler.Count.ToString();
+            Response.Headers["X-Skip"] = skip.ToString();
+            Response.Headers["X-Take"] = take.ToString();
+            return Ok(page);
+        }
+
+        private async Task PopulateImagesAsync(List<HaberOzet> page, CancellationToken cancellationToken)
+        {
+            if (page.Count == 0) return;
+
+            var cached = await _newsStore.GetDetailsAsync(page.Select(x => x.Link), cancellationToken);
+            foreach (var item in page)
+            {
+                if (!string.IsNullOrWhiteSpace(item.ResimUrl)) continue;
+                if (cached.TryGetValue(item.Link, out var cachedDetail))
+                {
+                    var cachedImage = cachedDetail.Detail?.ResimUrl;
+                    if (!string.IsNullOrWhiteSpace(cachedImage))
+                    {
+                        item.ResimUrl = cachedImage;
+                    }
+                }
+            }
+
+            var missing = page.Where(x => string.IsNullOrWhiteSpace(x.ResimUrl)).Take(10).ToList();
+            if (missing.Count == 0) return;
+
+            using var throttler = new SemaphoreSlim(4, 4);
+            var tasks = missing.Select(async item =>
+            {
+                if (string.IsNullOrWhiteSpace(item.Link)) return;
+
+                await throttler.WaitAsync(cancellationToken);
+                try
+                {
+                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    cts.CancelAfter(TimeSpan.FromSeconds(6));
+                    var image = await _haberServisi.HaberinResminiGetir(item.Link, cts.Token);
+                    if (!string.IsNullOrWhiteSpace(image)) item.ResimUrl = image;
+                }
+                catch
+                {
+                    // best-effort
+                }
+                finally
+                {
+                    throttler.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
         }
 
         [HttpGet("detail")]
-        public async Task<IActionResult> GetNewsDetail([FromQuery] string url)
+        public async Task<IActionResult> GetNewsDetail([FromQuery] string url, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(url)) return BadRequest("URL boş olamaz");
 
             try
             {
                 string decodedUrl = DecodeUrlFromBase64(url);
-                var detay = await _haberServisi.HaberinDetayiniGetir(decodedUrl);
+                var detay = await _haberServisi.HaberinDetayiniGetir(decodedUrl, cancellationToken);
                 return Ok(detay);
             }
             catch
@@ -219,4 +298,3 @@ namespace NewsApi.Controllers
         }
     }
 }
-

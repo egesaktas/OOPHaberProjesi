@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { ImageIcon } from 'lucide-react';
 import { NewsArticle } from '@/types';
 import { CategoryBadge } from './CategoryBadge';
 
@@ -10,6 +11,11 @@ interface NewsCardProps {
 
 export function NewsCard({ article, variant = 'default' }: NewsCardProps) {
   const timeAgo = formatDistanceToNow(new Date(article.created_at), { addSuffix: true });
+  const thumb = (
+    <div className="w-20 h-20 bg-muted rounded-md flex items-center justify-center flex-shrink-0">
+      <ImageIcon className="h-5 w-5 text-muted-foreground" />
+    </div>
+  );
 
   if (variant === 'compact') {
     return (
@@ -22,12 +28,10 @@ export function NewsCard({ article, variant = 'default' }: NewsCardProps) {
             </h3>
             <p className="meta-text mt-1">{timeAgo}</p>
           </div>
-          {article.image_url && (
-            <img
-              src={article.image_url}
-              alt=""
-              className="w-20 h-20 object-cover rounded-md flex-shrink-0"
-            />
+          {article.image_url ? (
+            <img src={article.image_url} alt="" className="w-20 h-20 object-cover rounded-md flex-shrink-0" />
+          ) : (
+            thumb
           )}
         </article>
       </Link>
@@ -38,12 +42,16 @@ export function NewsCard({ article, variant = 'default' }: NewsCardProps) {
     return (
       <Link to={`/news/${article.id}`} className="group block">
         <article className="news-card flex gap-4">
-          {article.image_url && (
+          {article.image_url ? (
             <img
               src={article.image_url}
               alt=""
               className="w-32 h-24 md:w-48 md:h-32 object-cover rounded-l-lg flex-shrink-0"
             />
+          ) : (
+            <div className="w-32 h-24 md:w-48 md:h-32 bg-muted rounded-l-lg flex items-center justify-center flex-shrink-0">
+              <ImageIcon className="h-6 w-6 text-muted-foreground" />
+            </div>
           )}
           <div className="flex-1 p-4">
             <CategoryBadge category={article.category} className="mb-2" />

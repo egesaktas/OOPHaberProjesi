@@ -101,6 +101,31 @@ namespace NewsApi.Storage
             }
         }
 
+        public async Task<Dictionary<string, CachedDetail>> GetDetailsAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+        {
+            var result = new Dictionary<string, CachedDetail>(StringComparer.OrdinalIgnoreCase);
+            var urlList = urls.Where(u => !string.IsNullOrWhiteSpace(u)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (urlList.Count == 0) return result;
+
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                var cache = await ReadAsync(cancellationToken);
+                foreach (var url in urlList)
+                {
+                    if (cache.DetailsByUrl.TryGetValue(url, out var detail))
+                    {
+                        result[url] = detail;
+                    }
+                }
+                return result;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
         private void PruneIfNeeded(NewsCacheFile cache)
         {
             if (cache.DetailsByUrl.Count <= _maxDetails) return;

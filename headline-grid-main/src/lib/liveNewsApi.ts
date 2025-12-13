@@ -46,6 +46,28 @@ export async function fetchLiveNews(signal?: AbortSignal) {
   return (await res.json()) as LiveNewsSummary[];
 }
 
+export interface FetchLiveNewsParams {
+  skip?: number;
+  take?: number;
+  category?: string | null;
+  q?: string | null;
+  signal?: AbortSignal;
+}
+
+export async function fetchLiveNewsPage(params: FetchLiveNewsParams = {}) {
+  const url = new URL(`${env.newsApiBaseUrl}/api/news`);
+  if (typeof params.skip === "number") url.searchParams.set("skip", String(params.skip));
+  if (typeof params.take === "number") url.searchParams.set("take", String(params.take));
+  if (params.category) url.searchParams.set("category", params.category);
+  if (params.q) url.searchParams.set("q", params.q);
+
+  const res = await fetch(url.toString(), { signal: params.signal });
+  if (!res.ok) throw new Error(`News API error (${res.status})`);
+  const items = (await res.json()) as LiveNewsSummary[];
+  const total = Number(res.headers.get("x-total-count") || "0") || undefined;
+  return { items, total };
+}
+
 export async function fetchLiveNewsDetail(encodedUrl: string, signal?: AbortSignal) {
   const res = await fetch(`${env.newsApiBaseUrl}/api/news/detail?url=${encodeURIComponent(encodedUrl)}`, { signal });
   if (!res.ok) throw new Error(`News detail API error (${res.status})`);

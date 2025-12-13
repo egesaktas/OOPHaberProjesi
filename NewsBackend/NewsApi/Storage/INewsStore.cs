@@ -26,5 +26,7 @@ namespace NewsApi.Storage
 
         Task<CachedDetail?> GetDetailAsync(string url, CancellationToken cancellationToken);
         Task SaveDetailAsync(string url, HaberDetay detail, DateTimeOffset fetchedAtUtc, float[]? embedding, CancellationToken cancellationToken);
+
+        Task<Dictionary<string, CachedDetail>> GetDetailsAsync(IEnumerable<string> urls, CancellationToken cancellationToken);
     }
 }

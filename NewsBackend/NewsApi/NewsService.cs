@@ -10,6 +10,7 @@ using System.Text;
 using System.Xml.Linq; // RSS okumak için gerekli
 using Microsoft.Extensions.Options;
 using NewsApi.Storage;
+using System.Text.RegularExpressions;
 
 namespace NewsApi.Services
 {
@@ -44,6 +45,35 @@ namespace NewsApi.Services
             _listTtl = TimeSpan.FromSeconds(Math.Max(0, options.Value.ListTtlSeconds));
         }
 
+        public async Task<string?> HaberinResminiGetir(string haberUrl, CancellationToken cancellationToken = default)
+        {
+            var cached = await _newsStore.GetDetailAsync(haberUrl, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(cached?.Detail?.ResimUrl))
+            {
+                return cached.Detail.ResimUrl;
+            }
+
+            try
+            {
+                var response = await _httpClient.GetStringAsync(haberUrl, cancellationToken);
+                var htmlDoc = new HtmlDocument();
+                htmlDoc.LoadHtml(response);
+
+                var metaImg = htmlDoc.DocumentNode.SelectSingleNode("//meta[@property='og:image']");
+                var image = metaImg?.GetAttributeValue("content", "") ?? "";
+                image = NormalizeImageUrl(image);
+                if (string.IsNullOrWhiteSpace(image)) return null;
+
+                var detail = new HaberDetay { Link = haberUrl, ResimUrl = image };
+                await _newsStore.SaveDetailAsync(haberUrl, detail, DateTimeOffset.UtcNow, embedding: null, cancellationToken);
+                return image;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         // --- RSS İLE GARANTİLİ LİSTELEME ---
         public async Task<List<HaberOzet>> HaberleriGetir()
         {
@@ -61,6 +91,7 @@ namespace NewsApi.Services
             {
                 await RssCek("BBC Türkçe", "http://feeds.bbci.co.uk/turkce/rss.xml", "Gündem", haberListesi);
                 await RssCek("CNN Türk", "https://www.cnnturk.com/feed/rss/all/news", "Gündem", haberListesi);
+                await RssCek("T24", "https://t24.com.tr/rss", "Gündem", haberListesi);
 
                 await RssCek("CNN Spor", "https://www.cnnturk.com/feed/rss/spor/news", "Spor", haberListesi);
                 await RssCek("CNN Ekonomi", "https://www.cnnturk.com/feed/rss/ekonomi/news", "Ekonomi", haberListesi);
@@ -96,7 +127,7 @@ namespace NewsApi.Services
                 var response = await _httpClient.GetStringAsync(rssUrl);
                 var xmlDoc = XDocument.Parse(response);
 
-                var items = xmlDoc.Descendants("item").Take(15);
+                var items = xmlDoc.Descendants("item").Take(25);
 
                 foreach (var item in items)
                 {
@@ -119,9 +150,29 @@ namespace NewsApi.Services
                     if (string.IsNullOrEmpty(resim))
                     {
                         XNamespace media = "http://search.yahoo.com/mrss/";
-                        var mediaContent = item.Element(media + "content");
+                        var mediaContent = item.Descendants(media + "content").FirstOrDefault();
                         if (mediaContent != null) resim = mediaContent.Attribute("url")?.Value ?? "";
                     }
+
+                    if (string.IsNullOrEmpty(resim))
+                    {
+                        XNamespace media = "http://search.yahoo.com/mrss/";
+                        var mediaThumb = item.Descendants(media + "thumbnail").FirstOrDefault();
+                        if (mediaThumb != null) resim = mediaThumb.Attribute("url")?.Value ?? "";
+                    }
+
+                    if (string.IsNullOrEmpty(resim))
+                    {
+                        var enclosure = item.Element("enclosure");
+                        if (enclosure != null) resim = enclosure.Attribute("url")?.Value ?? "";
+                    }
+
+                    if (string.IsNullOrEmpty(resim))
+                    {
+                        resim = ExtractFirstImageUrl(item) ?? "";
+                    }
+
+                    resim = NormalizeImageUrl(resim);
 
                     if (!string.IsNullOrEmpty(baslik) && !string.IsNullOrEmpty(link))
                     {
@@ -147,10 +198,54 @@ namespace NewsApi.Services
             }
         }
 
-        // --- DETAY ÇEKME (HTML Agility Pack) ---
-        public async Task<HaberDetay> HaberinDetayiniGetir(string haberUrl)
+        private static string? ExtractFirstImageUrl(XElement item)
         {
-            var cached = await _newsStore.GetDetailAsync(haberUrl, CancellationToken.None);
+            // Some feeds put an <img> tag inside <description> or <content:encoded>.
+            var html = item.Element("description")?.Value ?? "";
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                XNamespace content = "http://purl.org/rss/1.0/modules/content/";
+                html = item.Descendants(content + "encoded").FirstOrDefault()?.Value ?? "";
+            }
+
+            if (string.IsNullOrWhiteSpace(html)) return null;
+
+            // Prefer srcset if available
+            var srcset = Regex.Match(
+                html,
+                "(srcset|data-srcset)\\s*=\\s*['\\\"](?<set>[^'\\\"]+)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (srcset.Success)
+            {
+                var first = srcset.Groups["set"].Value.Split(',').FirstOrDefault()?.Trim() ?? "";
+                var firstUrl = first.Split(' ').FirstOrDefault()?.Trim() ?? "";
+                if (!string.IsNullOrWhiteSpace(firstUrl)) return firstUrl;
+            }
+
+            var match = Regex.Match(
+                html,
+                "(src|data-src)\\s*=\\s*['\\\"](?<url>(https?:)?//[^'\\\"\\s>]+|https?://[^'\\\"\\s>]+)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+            if (!match.Success) return null;
+            return match.Groups["url"].Value;
+        }
+
+        private static string NormalizeImageUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return "";
+            var trimmed = url.Trim();
+            if (trimmed.StartsWith("//", StringComparison.Ordinal))
+            {
+                return "https:" + trimmed;
+            }
+            return trimmed;
+        }
+
+        // --- DETAY ÇEKME (HTML Agility Pack) ---
+        public async Task<HaberDetay> HaberinDetayiniGetir(string haberUrl, CancellationToken cancellationToken = default)
+        {
+            var cached = await _newsStore.GetDetailAsync(haberUrl, cancellationToken);
             if (cached?.Detail != null && !string.IsNullOrWhiteSpace(cached.Detail.Icerik) &&
                 !cached.Detail.Icerik.StartsWith("İçerik yüklenirken hata:", StringComparison.OrdinalIgnoreCase))
             {
@@ -160,7 +255,7 @@ namespace NewsApi.Services
             var detay = new HaberDetay { Link = haberUrl };
             try
             {
-                var response = await _httpClient.GetStringAsync(haberUrl);
+                var response = await _httpClient.GetStringAsync(haberUrl, cancellationToken);
                 var htmlDoc = new HtmlDocument();
                 htmlDoc.LoadHtml(response);
 
@@ -204,7 +299,7 @@ namespace NewsApi.Services
                     {
                         contentForEmbedding = contentForEmbedding.Substring(0, 2000);
                     }
-                    embedding = await _embeddingService.EmbedAsync(contentForEmbedding, CancellationToken.None);
+                    embedding = await _embeddingService.EmbedAsync(contentForEmbedding, cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -212,9 +307,8 @@ namespace NewsApi.Services
                 Console.WriteLine($"Embedding hatası: {ex.Message}");
             }
 
-            await _newsStore.SaveDetailAsync(haberUrl, detay, DateTimeOffset.UtcNow, embedding, CancellationToken.None);
+            await _newsStore.SaveDetailAsync(haberUrl, detay, DateTimeOffset.UtcNow, embedding, cancellationToken);
             return detay;
         }
     }
 }
-

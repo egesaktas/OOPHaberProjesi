@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { FeaturedNews } from '@/components/news/FeaturedNews';
@@ -8,9 +8,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import type { NewsArticle } from '@/types';
-import { fetchLiveNews, fetchLiveNewsDetail, fetchRecommendations, liveSummaryToArticle } from '@/lib/liveNewsApi';
+import { fetchLiveNewsDetail, fetchLiveNewsPage, fetchRecommendations, liveSummaryToArticle } from '@/lib/liveNewsApi';
 import { useAuth } from '@/hooks/useAuth';
 import { getEffectiveUserId } from '@/lib/userId';
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 
 const LIVE_CATEGORIES = ['Gündem', 'Spor', 'Ekonomi', 'Dünya', 'Magazin', 'Teknoloji'] as const;
 
@@ -21,45 +22,74 @@ const Index = () => {
 
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [recommended, setRecommended] = useState<NewsArticle[]>([]);
   const [recommendedError, setRecommendedError] = useState<string | null>(null);
 
   const { user } = useAuth();
+  const pageSize = 20;
 
-  const load = async () => {
-    setError(null);
-    setLoading(true);
+  const loadFirstPage = useCallback(
+    async (signal?: AbortSignal) => {
+      setError(null);
+      setLoading(true);
+      setTotal(null);
+      try {
+        const { items, total } = await fetchLiveNewsPage({
+          skip: 0,
+          take: pageSize,
+          category: categoryFilter,
+          q: query,
+          signal,
+        });
+        setArticles(items.map(liveSummaryToArticle));
+        setTotal(total ?? null);
+        setLastUpdatedAt(new Date());
+      } catch (e) {
+        if ((e as any)?.name !== 'AbortError') {
+          setError(e instanceof Error ? e.message : 'Failed to load news');
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [categoryFilter, query]
+  );
+
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore) return;
+    if (total !== null && articles.length >= total) return;
+
+    setLoadingMore(true);
     try {
-      const data = await fetchLiveNews();
-      setArticles(data.map(liveSummaryToArticle));
-      setLastUpdatedAt(new Date());
+      const { items, total: nextTotal } = await fetchLiveNewsPage({
+        skip: articles.length,
+        take: pageSize,
+        category: categoryFilter,
+        q: query,
+      });
+
+      setArticles((prev) => {
+        const existing = new Set(prev.map((p) => p.id));
+        const next = items.map(liveSummaryToArticle).filter((a) => !existing.has(a.id));
+        return [...prev, ...next];
+      });
+      if (typeof nextTotal === 'number') setTotal(nextTotal);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load news');
+      setError(e instanceof Error ? e.message : 'Failed to load more news');
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }, [articles.length, categoryFilter, loading, loadingMore, query, total]);
 
   useEffect(() => {
     const ac = new AbortController();
-    setError(null);
-    setLoading(true);
-    fetchLiveNews(ac.signal)
-      .then((data) => {
-        setArticles(data.map(liveSummaryToArticle));
-        setLastUpdatedAt(new Date());
-      })
-      .catch((e) => {
-        if (e?.name !== 'AbortError') {
-          setError(e instanceof Error ? e.message : 'Failed to load news');
-        }
-      })
-      .finally(() => setLoading(false));
-
+    loadFirstPage(ac.signal);
     return () => ac.abort();
-  }, []);
+  }, [loadFirstPage]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -80,19 +110,10 @@ const Index = () => {
     return () => ac.abort();
   }, [user]);
 
-  const filteredNews = useMemo(() => {
-    let next = articles;
-    if (categoryFilter) next = next.filter((a) => a.category === categoryFilter);
-    if (query) {
-      const q = query.toLowerCase();
-      next = next.filter((a) => a.title.toLowerCase().includes(q));
-    }
-    return next;
-  }, [articles, categoryFilter, query]);
-
-  const featuredArticle = filteredNews[0];
-  const latestNews = featuredArticle ? filteredNews.slice(1) : [];
+  const featuredArticle = articles[0];
+  const latestNews = featuredArticle ? articles.slice(1) : [];
   const attemptedHeroImages = useRef<Set<string>>(new Set());
+  const attemptedThumbImages = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!featuredArticle || loading) return;
@@ -113,6 +134,52 @@ const Index = () => {
     return () => ac.abort();
   }, [featuredArticle?.id, featuredArticle?.image_url, loading]);
 
+  useEffect(() => {
+    if (loading) return;
+    const missing = articles
+      .filter((a) => !a.image_url && !attemptedThumbImages.current.has(a.id))
+      .slice(0, 8);
+    if (missing.length === 0) return;
+
+    const ac = new AbortController();
+    let stopped = false;
+
+    const run = async () => {
+      const queue = [...missing];
+      const concurrency = 3;
+
+      const workers = Array.from({ length: concurrency }).map(async () => {
+        while (!stopped) {
+          const next = queue.shift();
+          if (!next) return;
+          attemptedThumbImages.current.add(next.id);
+          try {
+            const detail = await fetchLiveNewsDetail(next.id, ac.signal);
+            if (detail.resimUrl) {
+              setArticles((prev) => prev.map((p) => (p.id === next.id ? { ...p, image_url: detail.resimUrl } : p)));
+            }
+          } catch {
+            // ignore
+          }
+        }
+      });
+
+      await Promise.all(workers);
+    };
+
+    run();
+    return () => {
+      stopped = true;
+      ac.abort();
+    };
+  }, [articles, loading]);
+
+  const { sentinelRef } = useInfiniteScroll({
+    enabled: !loading && !error && (total === null || articles.length < total),
+    onLoadMore: loadMore,
+    rootMargin: '900px',
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -127,7 +194,7 @@ const Index = () => {
               {lastUpdatedAt ? ` • Updated ${lastUpdatedAt.toLocaleTimeString()}` : ''}
             </p>
           </div>
-          <Button variant="outline" className="gap-2 w-fit" onClick={load} disabled={loading}>
+          <Button variant="outline" className="gap-2 w-fit" onClick={() => loadFirstPage()} disabled={loading}>
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
             Refresh
           </Button>
@@ -145,7 +212,7 @@ const Index = () => {
                     : 'bg-secondary text-secondary-foreground hover:bg-accent'
                 }`}
               >
-                Tüm
+                Tümü
               </Link>
               {LIVE_CATEGORIES.map((cat) => {
                 const params = new URLSearchParams();
@@ -204,11 +271,11 @@ const Index = () => {
             </div>
 
             {loading ? (
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-4">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="bg-card border border-border rounded-lg overflow-hidden">
-                    <Skeleton className="aspect-video w-full" />
-                    <div className="p-4 space-y-3">
+                  <div key={i} className="bg-card border border-border rounded-lg overflow-hidden p-4 flex gap-4">
+                    <Skeleton className="w-32 h-24 rounded-lg" />
+                    <div className="flex-1 space-y-3">
                       <Skeleton className="h-4 w-24" />
                       <Skeleton className="h-6 w-full" />
                       <Skeleton className="h-4 w-4/5" />
@@ -218,20 +285,43 @@ const Index = () => {
                 ))}
               </div>
             ) : latestNews.length > 0 ? (
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-4">
                 {latestNews.map((article, index) => (
                   <div
                     key={article.id}
                     className="animate-fade-in"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <NewsCard article={article} />
+                    <NewsCard article={article} variant="horizontal" />
                   </div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">No articles found.</p>
+              </div>
+            )}
+
+            <div ref={sentinelRef} className="h-1" />
+            {loadingMore && (
+              <div className="mt-4 space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="bg-card border border-border rounded-lg overflow-hidden p-4 flex gap-4">
+                    <Skeleton className="w-32 h-24 rounded-lg" />
+                    <div className="flex-1 space-y-3">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-4 w-4/5" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!loading && !loadingMore && total !== null && articles.length < total && (
+              <div className="mt-6 flex justify-center">
+                <Button variant="outline" onClick={loadMore}>
+                  Load more
+                </Button>
               </div>
             )}
           </div>
@@ -345,4 +435,3 @@ const Index = () => {
 };
 
 export default Index;
-
