@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#000000" />
+  <g stroke="#e00000" stroke-width="48" stroke-linecap="round" fill="none">
+    <!-- Slanted vertical stroke -->
+    <line x1="150" y1="80" x2="90" y2="432" />
+    <!-- Top horizontal stroke -->
+    <line x1="160" y1="130" x2="430" y2="130" />
+    <!-- Middle horizontal stroke -->
+    <line x1="180" y1="250" x2="360" y2="250" />
+    <!-- Lower short stroke to hint the F shape -->
+    <line x1="150" y1="360" x2="260" y2="360" />
+  </g>
+</svg>
+
