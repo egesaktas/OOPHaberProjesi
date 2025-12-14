@@ -109,7 +109,7 @@ const Auth = () => {
             <span className="text-sm font-medium">Back to News</span>
           </Link>
           <Newspaper className="h-16 w-16 mb-6" />
-          <h1 className="font-serif text-5xl font-bold mb-4">NewsHub</h1>
+          <h1 className="font-serif text-5xl font-bold mb-4">IFADE</h1>
           <p className="text-xl text-primary-foreground/90 max-w-md">
             Your trusted source for breaking news, in-depth analysis, and the stories that shape our world.
           </p>
@@ -141,7 +141,7 @@ const Auth = () => {
           <div className="text-center mb-8">
             <div className="lg:hidden flex items-center justify-center gap-2 mb-4">
               <Newspaper className="h-8 w-8 text-primary" />
-              <span className="font-serif text-2xl font-bold">NewsHub</span>
+              <span className="font-serif text-2xl font-bold">IFADE</span>
             </div>
             <h2 className="headline-lg mb-2">
               {isLogin ? 'Welcome back' : 'Create account'}

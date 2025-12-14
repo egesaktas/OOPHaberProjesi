@@ -78,7 +78,10 @@ namespace NewsApi.Services
         public async Task<List<HaberOzet>> HaberleriGetir()
         {
             var cached = await _newsStore.GetLatestListAsync(CancellationToken.None);
-            if (cached != null && _listTtl > TimeSpan.Zero && (DateTimeOffset.UtcNow - cached.FetchedAtUtc) <= _listTtl)
+            if (cached != null &&
+                _listTtl > TimeSpan.Zero &&
+                (DateTimeOffset.UtcNow - cached.FetchedAtUtc) <= _listTtl &&
+                cached.Items.Any(x => string.Equals(x.Kategori, "Teknoloji", StringComparison.OrdinalIgnoreCase)))
             {
                 return cached.Items;
             }
@@ -97,6 +100,7 @@ namespace NewsApi.Services
                 await RssCek("CNN Ekonomi", "https://www.cnnturk.com/feed/rss/ekonomi/news", "Ekonomi", haberListesi);
                 await RssCek("CNN Magazin", "https://www.cnnturk.com/feed/rss/magazin/news", "Magazin", haberListesi);
                 await RssCek("CNN Teknoloji", "https://www.cnnturk.com/feed/rss/bilim-teknoloji/news", "Teknoloji", haberListesi);
+                await RssCek("NTV", "https://www.ntv.com.tr/teknoloji.rss", "Teknoloji", haberListesi);
                 await RssCek("CNN Dünya", "https://www.cnnturk.com/feed/rss/dunya/news", "Dünya", haberListesi);
             }
             catch (Exception ex)
@@ -127,13 +131,83 @@ namespace NewsApi.Services
                 var response = await _httpClient.GetStringAsync(rssUrl);
                 var xmlDoc = XDocument.Parse(response);
 
-                var items = xmlDoc.Descendants("item").Take(25);
+                var itemNodes = xmlDoc
+                    .Descendants()
+                    .Where(x => string.Equals(x.Name.LocalName, "item", StringComparison.OrdinalIgnoreCase))
+                    .Take(25)
+                    .ToList();
 
-                foreach (var item in items)
+                // NTV feed is Atom (<entry>), not RSS (<item>).
+                if (itemNodes.Count == 0)
                 {
-                    string baslik = item.Element("title")?.Value.Trim() ?? "";
-                    string link = item.Element("link")?.Value.Trim() ?? "";
-                    string zamanHam = item.Element("pubDate")?.Value ?? "";
+                    var entryNodes = xmlDoc
+                        .Descendants()
+                        .Where(x => string.Equals(x.Name.LocalName, "entry", StringComparison.OrdinalIgnoreCase))
+                        .Take(25)
+                        .ToList();
+
+                    foreach (var entry in entryNodes)
+                    {
+                        string baslik = entry.Elements().FirstOrDefault(e => e.Name.LocalName == "title")?.Value.Trim() ?? "";
+
+                        string link = "";
+                        var linkEl = entry.Elements().FirstOrDefault(e => e.Name.LocalName == "link" && string.Equals(e.Attribute("rel")?.Value, "alternate", StringComparison.OrdinalIgnoreCase))
+                                     ?? entry.Elements().FirstOrDefault(e => e.Name.LocalName == "link");
+                        if (linkEl != null) link = linkEl.Attribute("href")?.Value?.Trim() ?? "";
+                        if (string.IsNullOrWhiteSpace(link))
+                        {
+                            link = entry.Elements().FirstOrDefault(e => e.Name.LocalName == "id")?.Value.Trim() ?? "";
+                        }
+
+                        string zamanHam =
+                            entry.Elements().FirstOrDefault(e => e.Name.LocalName == "published")?.Value ??
+                            entry.Elements().FirstOrDefault(e => e.Name.LocalName == "updated")?.Value ??
+                            "";
+
+                        string zaman = "Yeni";
+                        DateTimeOffset? yayinTarihi = null;
+                        if (DateTimeOffset.TryParse(zamanHam, out var dateValue))
+                        {
+                            yayinTarihi = dateValue;
+                            zaman = dateValue.ToLocalTime().ToString("HH:mm");
+                        }
+
+                        string resim = "";
+                        var enclosure = entry.Elements().FirstOrDefault(e => e.Name.LocalName == "enclosure");
+                        if (enclosure != null) resim = enclosure.Attribute("url")?.Value ?? "";
+
+                        if (string.IsNullOrEmpty(resim))
+                        {
+                            resim = ExtractFirstImageUrl(entry) ?? "";
+                        }
+
+                        resim = NormalizeImageUrl(resim);
+
+                        if (!string.IsNullOrEmpty(baslik) && !string.IsNullOrEmpty(link))
+                        {
+                            if (!liste.Any(x => x.Baslik == baslik))
+                            {
+                                liste.Add(new HaberOzet
+                                {
+                                    Baslik = baslik,
+                                    Link = link,
+                                    Kaynak = kaynakAdi,
+                                    Kategori = sabitKategori,
+                                    Zaman = zaman,
+                                    ResimUrl = resim ?? "",
+                                    YayinTarihi = yayinTarihi
+                                });
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                foreach (var item in itemNodes)
+                {
+                    string baslik = item.Elements().FirstOrDefault(e => e.Name.LocalName == "title")?.Value.Trim() ?? "";
+                    string link = item.Elements().FirstOrDefault(e => e.Name.LocalName == "link")?.Value.Trim() ?? "";
+                    string zamanHam = item.Elements().FirstOrDefault(e => e.Name.LocalName == "pubDate")?.Value ?? "";
 
                     string zaman = "Yeni";
                     DateTimeOffset? yayinTarihi = null;
@@ -144,7 +218,7 @@ namespace NewsApi.Services
                     }
 
                     string resim = "";
-                    var imageEl = item.Element("image");
+                    var imageEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "image");
                     if (imageEl != null) resim = imageEl.Element("url")?.Value ?? "";
 
                     if (string.IsNullOrEmpty(resim))
@@ -163,7 +237,7 @@ namespace NewsApi.Services
 
                     if (string.IsNullOrEmpty(resim))
                     {
-                        var enclosure = item.Element("enclosure");
+                        var enclosure = item.Elements().FirstOrDefault(e => e.Name.LocalName == "enclosure");
                         if (enclosure != null) resim = enclosure.Attribute("url")?.Value ?? "";
                     }
 
@@ -201,7 +275,10 @@ namespace NewsApi.Services
         private static string? ExtractFirstImageUrl(XElement item)
         {
             // Some feeds put an <img> tag inside <description> or <content:encoded>.
-            var html = item.Element("description")?.Value ?? "";
+            var html =
+                item.Elements().FirstOrDefault(e => e.Name.LocalName == "description")?.Value ??
+                item.Elements().FirstOrDefault(e => e.Name.LocalName == "content")?.Value ??
+                "";
             if (string.IsNullOrWhiteSpace(html))
             {
                 XNamespace content = "http://purl.org/rss/1.0/modules/content/";
